@@ -436,8 +436,8 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
                         st.success(f"'{full_product_name}' added successfully with code {code}.")
                         st.rerun()
     
-                except Exception as e:
-                    safe_error(e)
+            except Exception as e:
+                safe_error(e)
                 
     with tab2:
         if not products: 
