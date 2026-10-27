@@ -240,20 +240,17 @@ with st.container(key='site_header'):
         st.markdown('<div class="site-brand-name">Gulps &amp; Grubs</div><div class="site-brand-tag">AT THE GARAGE · POS</div>', unsafe_allow_html=True)
     with mode_col:
         st.markdown('<div class="site-nav-label">WORKSPACE</div>', unsafe_allow_html=True)
-        mode=st.radio('Workspace',['Admin','Cashier','Kitchen'],index=['Admin','Cashier','Kitchen'].index(st.session_state.get('mode_choice','Admin')) if st.session_state.get('mode_choice','Admin') in ['Admin','Cashier','Kitchen'] else 0,
+        mode=st.radio('Workspace',['Admin','Cashier'],index=0 if st.session_state.get('mode_choice','Admin')=='Admin' else 1,
                       horizontal=True,key='mode_choice',label_visibility='collapsed')
     st.session_state.mode=mode
     with page_col:
         st.markdown('<div class="site-nav-label">NAVIGATION</div>', unsafe_allow_html=True)
         if mode=='Admin':
-            page=st.radio('Admin navigation',['Dashboard','Products & Inventory','Sales History','Activity History','Pickup Queue'],
+            page=st.radio('Admin navigation',['Dashboard','Products & Inventory','Sales History','Pickup Queue'],
                           horizontal=True,key='admin_page',label_visibility='collapsed')
-        elif mode=='Cashier':
-            page=st.radio('Cashier navigation',['New Sale','Order Queue','Last Transaction','History'],
-                          horizontal=True,key='cashier_page',label_visibility='collapsed')
         else:
-            page=st.radio('Kitchen navigation',['Kitchen Queue'],
-                          horizontal=True,key='kitchen_page',label_visibility='collapsed')
+            page=st.radio('Cashier navigation',['New Sale','Last Transaction'],
+                          horizontal=True,key='cashier_page',label_visibility='collapsed')
 st.caption('Demo mode selector only — it is not secure authentication. Add role-based login before public deployment.')
 
 # Rebuild the AVL tree from SQLite at each run, keeping the database as source of truth.
@@ -293,33 +290,21 @@ if mode=='Admin' and page=='Dashboard':
 
 elif mode=='Admin' and page=='Products & Inventory':
     st.subheader('Products & inventory')
-    tab1,tab2,tab3,tab4=st.tabs(['Add product','Edit / deactivate','Restock','Load business menu'])
+    tab1,tab2,tab3=st.tabs(['Add product','Edit / deactivate','Restock'])
     with tab1:
-        category_options=['Beverage','Food','Snack','Dessert','Other'] + MENU_CATEGORIES
-        category=st.selectbox('Category',list(dict.fromkeys(category_options)),key='new_product_category')
-        has_size_prices = category == 'Beverage' or category.startswith('GULPS -')
-        if has_size_prices:
-            st.caption('Set separate selling prices for each drink size. Inventory is tracked as servings of the drink, regardless of cup size.')
         with st.form('add_product_form',clear_on_submit=True):
             c1,c2=st.columns(2)
             code=c1.text_input('Product code *',placeholder='e.g. DRK-004').strip().upper()
             name=c2.text_input('Product name *',placeholder='e.g. Brown Sugar Latte').strip()
-            if has_size_prices:
-                s8,s12,s16=st.columns(3)
-                price8=s8.number_input('8 oz price (₱)',min_value=0.0,max_value=1000000.0,value=40.0,step=5.0,format='%.2f')
-                price12=s12.number_input('12 oz price (₱)',min_value=0.0,max_value=1000000.0,value=50.0,step=5.0,format='%.2f')
-                price16=s16.number_input('16 oz price (₱)',min_value=0.0,max_value=1000000.0,value=60.0,step=5.0,format='%.2f')
-                price=price12
-            else:
-                price=st.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=50.0,step=0.5,format='%.2f')
-            c3,c4=st.columns(2)
-            stock=c3.number_input('Starting stock',min_value=0,max_value=1000000,value=0,step=1)
-            threshold=c4.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=5,step=1)
+            category=st.selectbox('Category',['Beverage','Food','Snack','Dessert','Other'])
+            c3,c4,c5=st.columns(3)
+            price=c3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=50.0,step=0.5,format='%.2f')
+            stock=c4.number_input('Starting stock',min_value=0,max_value=1000000,value=0,step=1)
+            threshold=c5.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=5,step=1)
             submitted=st.form_submit_button('Add product',type='primary',use_container_width=True)
         if submitted:
             try:
-                size_prices={8:cents_from_peso(price8),12:cents_from_peso(price12),16:cents_from_peso(price16)} if has_size_prices else None
-                pid=db.add_product(code,name,category,cents_from_peso(price),int(stock),int(threshold),size_prices=size_prices); db.log_activity('Admin','Product added',f'{code} · {name} · Stock {int(stock)}'); st.success(f'{name} added successfully.'); st.rerun()
+                db.add_product(code,name,category,cents_from_peso(price),int(stock),int(threshold)); st.success(f'{name} added successfully.'); st.rerun()
             except Exception as e: safe_error(e)
     products=db.list_products()
     active=[p for p in products if p['active']]
@@ -334,34 +319,17 @@ elif mode=='Admin' and page=='Products & Inventory':
                     ec1,ec2=st.columns(2)
                     new_code=ec1.text_input('Product code',value=p['code']).strip().upper()
                     new_name=ec2.text_input('Product name',value=p['name']).strip()
-                    edit_categories=list(dict.fromkeys(['Beverage','Food','Snack','Dessert','Other'] + MENU_CATEGORIES + [p['category']]))
-                    new_cat=st.selectbox('Category',edit_categories,index=edit_categories.index(p['category']))
+                    new_cat=st.selectbox('Category',['Beverage','Food','Snack','Dessert','Other'],index=['Beverage','Food','Snack','Dessert','Other'].index(p['category']) if p['category'] in ['Beverage','Food','Snack','Dessert','Other'] else 4)
                     ec3,ec4=st.columns(2)
                     new_price=ec3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=p['price_cents']/100,step=0.5,format='%.2f')
                     new_threshold=ec4.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=p['low_stock_threshold'],step=1)
                     save=st.form_submit_button('Save changes',type='primary')
                 if save:
-                    try: db.update_product(p['id'],new_code,new_name,new_cat,cents_from_peso(new_price),int(new_threshold)); db.log_activity('Admin','Product updated',f'{new_code} · {new_name}'); st.success('Product updated.'); st.rerun()
+                    try: db.update_product(p['id'],new_code,new_name,new_cat,cents_from_peso(new_price),int(new_threshold)); st.success('Product updated.'); st.rerun()
                     except Exception as e: safe_error(e)
-                current_sizes=db.get_product_sizes(p['id'])
-                if current_sizes:
-                    if not current_sizes: current_sizes={8:p['price_cents'],12:p['price_cents'],16:p['price_cents']}
-                    with st.form(f"size_prices_{p['id']}"):
-                        st.markdown('**Available drink size pricing**')
-                        st.caption('Only sizes currently configured for this menu item are shown.')
-                        size_inputs={}
-                        size_cols=st.columns(max(1,len(current_sizes)))
-                        for size_idx,size in enumerate(current_sizes):
-                            size_inputs[size]=size_cols[size_idx].number_input(f'{size} oz price (₱)',min_value=0.0,max_value=1000000.0,value=current_sizes[size]/100,step=5.0,format='%.2f',key=f'price_{p["id"]}_{size}')
-                        save_sizes=st.form_submit_button('Save drink size prices',type='primary')
-                    if save_sizes:
-                        try:
-                            db.set_product_sizes(p['id'],{size:cents_from_peso(price) for size,price in size_inputs.items()}); db.log_activity('Admin','Drink prices updated',f"{p['code']} · {size_inputs}")
-                            st.success('Drink size prices updated.'); st.rerun()
-                        except Exception as e: safe_error(e)
                 st.warning('Products are deactivated instead of deleted so historical sales remain intact.')
                 if st.button('Deactivate selected product',key='deactivate_btn'):
-                    try: db.deactivate_product(p['id']); db.log_activity('Admin','Product deleted / deactivated',f"{p['code']} · {p['name']}"); st.success('Product deactivated. Historical sales are preserved.'); st.rerun()
+                    try: db.deactivate_product(p['id']); st.success('Product deactivated.'); st.rerun()
                     except Exception as e: safe_error(e)
             else: st.info('This product is inactive and cannot be sold. Its historic transaction details are preserved.')
     with tab3:
@@ -372,38 +340,14 @@ elif mode=='Admin' and page=='Products & Inventory':
                 qty=st.number_input('Quantity to add',min_value=1,max_value=1000000,value=1,step=1)
                 restock=st.form_submit_button('Record restock',type='primary')
             if restock:
-                try: db.restock_product(options[chosen]['id'],int(qty)); db.log_activity('Admin','Inventory restocked',f"{options[chosen]['code']} · +{int(qty)}"); st.success('Stock updated.'); st.rerun()
+                try: db.restock_product(options[chosen]['id'],int(qty)); st.success('Stock updated.'); st.rerun()
                 except Exception as e: safe_error(e)
         else: st.info('Add an active product before restocking.')
     st.markdown('#### Product catalogue')
-    with tab4:
-        st.markdown('### Import the Gulps & Grubs menu')
-        st.write(f'This adds the {len(MENU_ITEMS)} menu items from your supplied menu to this existing POS database. It does not create a separate application.')
-        st.caption('Menu products start with the stock quantity you choose below. Choose 0 if you want to enter actual stock through Restock. Existing product codes are skipped, so re-importing will not duplicate items.')
-        start_stock=st.number_input('Starting stock per newly imported item',min_value=0,max_value=100000,value=0,step=1,key='menu_start_stock')
-        threshold=st.number_input('Low-stock threshold for imported items',min_value=0,max_value=100000,value=5,step=1,key='menu_threshold')
-        if st.button('Import Gulps & Grubs menu into this POS',type='primary',use_container_width=True):
-            existing_codes={p['code'].upper() for p in db.list_products()}
-            added=0; skipped=0; errors=[]
-            for menu_item in MENU_ITEMS:
-                if menu_item['code'].upper() in existing_codes:
-                    skipped+=1; continue
-                sizes=menu_item['sizes'] or None
-                base_price=menu_item['sizes'].get(12, next(iter(menu_item['sizes'].values()), menu_item['price_cents']))
-                try:
-                    db.add_product(menu_item['code'],menu_item['name'],menu_item['category'],int(base_price),int(start_stock),int(threshold),size_prices=sizes)
-                    added+=1
-                except Exception as exc:
-                    errors.append(f"{menu_item['code']}: {exc}")
-            db.log_activity('Admin','Menu imported',f'{added} added, {skipped} skipped')
-            st.success(f'Menu import finished: {added} added, {skipped} already existed.')
-            if errors: st.error('Some items could not be imported: ' + '; '.join(errors[:5]))
-            st.rerun()
-
     search=st.text_input('Search by code or product name',key='product_search')
     shown=[p for p in products if search.casefold() in (p['code']+' '+p['name']).casefold()]
     if shown:
-        st.dataframe(pd.DataFrame([{'Code':p['code'],'Product':p['name'],'Category':p['category'],'Price':(' · '.join(f"{size} oz {money(price)}" for size,price in db.get_product_sizes(p['id']).items()) if db.get_product_sizes(p['id']) else money(p['price_cents'])),'Stock':p['stock'],'Low-stock threshold':p['low_stock_threshold'],'Status':'Active' if p['active'] else 'Inactive'} for p in shown]),use_container_width=True,hide_index=True)
+        st.dataframe(pd.DataFrame([{'Code':p['code'],'Product':p['name'],'Category':p['category'],'Price':money(p['price_cents']),'Stock':p['stock'],'Low-stock threshold':p['low_stock_threshold'],'Status':'Active' if p['active'] else 'Inactive'} for p in shown]),use_container_width=True,hide_index=True)
     else: st.info('No products match your search.')
     with st.expander('AVL Tree diagnostic (product codes sorted by the AVL tree)'):
         st.write([p['code'] for p in product_tree.inorder()]); st.caption('The tree is rebuilt from active SQLite products on every app run; product-code search is O(log n) when balanced.')
@@ -420,22 +364,9 @@ elif mode=='Admin' and page=='Sales History':
             st.dataframe(pd.DataFrame([{'Sale #':r['id'],'Date/time':r['created_at'].replace('T',' '),'Cashier':r['cashier_label'],'Total':money(r['total_cents'])} for r in rows]),use_container_width=True,hide_index=True)
             chosen=st.selectbox('View sale details',[r['id'] for r in rows],format_func=lambda x:f"Sale #{x}")
             details=db.transaction_items(chosen)
-            st.dataframe(pd.DataFrame([{'Code':x['product_code'],'Product':x['product_name'],'Size':(f"{x.get('size_oz')} oz" if x.get('size_oz') else '—'),'Options':x.get('customizations',''),'Qty':x['quantity'],'Unit price':money(x['unit_price_cents']),'Subtotal':money(x['subtotal_cents'])} for x in details]),use_container_width=True,hide_index=True)
+            st.dataframe(pd.DataFrame([{'Code':x['product_code'],'Product':x['product_name'],'Qty':x['quantity'],'Unit price':money(x['unit_price_cents']),'Subtotal':money(x['subtotal_cents'])} for x in details]),use_container_width=True,hide_index=True)
             st.download_button('Download filtered sales CSV',pd.DataFrame([{'sale_id':r['id'],'created_at':r['created_at'],'cashier':r['cashier_label'],'total_php':r['total_cents']/100} for r in rows]).to_csv(index=False).encode('utf-8'),'sales_history.csv','text/csv')
         else: st.info('No transactions were found for the selected dates.')
-
-elif mode=='Admin' and page=='Activity History':
-    st.subheader('Admin and staff activity history')
-    st.caption('Persistent audit trail for sales, queue actions, product changes, and inventory updates.')
-    f1,f2=st.columns([1,2])
-    role_filter=f1.selectbox('Mode', ['All','Admin','Cashier','Kitchen','System'])
-    activity_search=f2.text_input('Search activity history',placeholder='Search product, order number, sale number, action...')
-    rows=db.activity_history(role_filter,activity_search,limit=1000)
-    if rows:
-        st.dataframe(pd.DataFrame([{'Date/time':r['created_at'].replace('T',' '),'Mode':r['actor_mode'],'Action':r['action'],'Details':r['details']} for r in rows]),use_container_width=True,hide_index=True)
-        st.download_button('Download activity history CSV',pd.DataFrame(rows).to_csv(index=False).encode('utf-8'),'activity_history.csv','text/csv')
-    else:
-        st.info('No activity matches this search yet.')
 
 elif mode=='Admin' and page=='Pickup Queue':
     st.subheader('Scheduled pickup queue')
@@ -446,7 +377,7 @@ elif mode=='Admin' and page=='Pickup Queue':
         priority=st.select_slider('Priority',options=[1,2,3,4,5],value=3,format_func=lambda x:{1:'1 · Urgent',2:'2 · High',3:'3 · Normal',4:'4 · Low',5:'5 · Flexible'}[x])
         add_order_btn=st.form_submit_button('Add pending pickup order',type='primary')
     if add_order_btn:
-        try: oid=db.add_order(customer,details,int(priority),order_type='Pickup'); st.success(f'Pickup order #{oid} added.'); st.rerun()
+        try: oid=db.add_order(customer,details,int(priority)); st.success(f'Pickup order #{oid} added.'); st.rerun()
         except Exception as e: safe_error(e)
     heap=rebuild_heap(); next_order=heap.peek()
     if next_order:
@@ -467,44 +398,25 @@ elif mode=='Cashier' and page=='New Sale':
     left,right=st.columns([1.35,1],gap='large')
     with left:
         st.markdown('#### Available products')
-        menu_categories=['All categories'] + sorted({p['category'] for p in products})
-        selected_category=st.selectbox('Browse category',menu_categories,key='cashier_category_filter')
         query=st.text_input('Find a product',placeholder='Search product name or code')
-        category_products=products if selected_category=='All categories' else [p for p in products if p['category']==selected_category]
-        # Exact-code lookup goes through the manually implemented AVL tree; category/name filtering uses SQLite-backed records.
+        # Product lookup goes through the manually implemented AVL tree.
         if query.strip():
             match=product_tree.search(query.strip())
-            shown=[match] if match and match in category_products else [p for p in category_products if query.casefold() in (p['name']+' '+p['code']).casefold()]
-        else: shown=category_products
+            shown=[match] if match else [p for p in products if query.casefold() in (p['name']+' '+p['code']).casefold()]
+        else: shown=products
         if not shown: st.info('No matching active products.')
         for start_idx in range(0,len(shown),2):
             cols=st.columns(2)
             for col,p in zip(cols,shown[start_idx:start_idx+2]):
                 with col:
-                    sizes=db.get_product_sizes(p['id'])
-                    is_drink=bool(sizes)
-                    if is_drink:
-                        price_line=' · '.join(f"{size} oz {money(price)}" for size,price in sizes.items())
-                    else:
-                        price_line=money(p['price_cents'])
-                    st.markdown(f"<div class='product-card'><b>{p['name']}</b><br><span class='small-note'>{p['code']} · {p['category']}</span><h3>{price_line}</h3><span class='small-note'>In stock: {p['stock']}</span></div>",unsafe_allow_html=True)
+                    st.markdown(f"<div class='product-card'><b>{p['name']}</b><br><span class='small-note'>{p['code']} · {p['category']}</span><h3>{money(p['price_cents'])}</h3><span class='small-note'>In stock: {p['stock']}</span></div>",unsafe_allow_html=True)
                     with st.form(f"add_cart_{p['id']}"):
-                        size_oz=None; unit_price=p['price_cents']; chosen_options=[]
-                        if is_drink:
-                            available_sizes=list(sizes.keys())
-                            size_oz=st.radio('Choose cup size (oz)',available_sizes,format_func=lambda z:f"{z} oz",horizontal=True,key=f"size_{p['id']}")
-                            unit_price=sizes[size_oz]
-                            st.caption(f"Selected size price: {money(unit_price)}")
-                        for option_name, option_values in menu_options_for(p).items():
-                            choice=st.selectbox(option_name,option_values,key=f"opt_{p['id']}_{option_name}")
-                            chosen_options.append(f"{option_name}: {choice}")
-                        customizations='; '.join(chosen_options)
                         qty=st.number_input('Qty',min_value=1,max_value=max(1,int(p['stock'])),value=1,step=1,key=f"qty_{p['id']}",disabled=p['stock']<1)
                         add=st.form_submit_button('Add to cart',use_container_width=True,disabled=p['stock']<1)
                     if add:
                         try:
                             if qty>p['stock']: raise ValueError(f"Only {p['stock']} unit(s) are in stock.")
-                            st.session_state.cart.add(p,int(qty),size_oz=size_oz,unit_price_cents=unit_price,customizations=customizations); size_label=f" ({size_oz} oz)" if size_oz else ''; option_label=f" · {customizations}" if customizations else ''; st.success(f"Added {qty} × {p['name']}{size_label}{option_label}."); st.rerun()
+                            st.session_state.cart.add(p,int(qty)); st.success(f"Added {qty} × {p['name']}."); st.rerun()
                         except Exception as e: safe_error(e)
     with right:
         st.markdown('#### Shopping cart')
@@ -514,102 +426,32 @@ elif mode=='Cashier' and page=='New Sale':
         else:
             for item in items:
                 with st.container(border=True):
-                    c1,c2=st.columns([2,1]); size_label=f" · {item['size_oz']} oz" if item.get('size_oz') else ''; option_label=f"\n\n{item['customizations']}" if item.get('customizations') else ''; c1.markdown(f"**{item['name']}{size_label}**{option_label}\n\n{money(item['unit_price_cents'])} each")
+                    c1,c2=st.columns([2,1]); c1.markdown(f"**{item['name']}**\n\n{money(item['unit_price_cents'])} each")
                     c2.markdown(f"**{money(item['subtotal_cents'])}**")
                     qcol,rmcol=st.columns([2,1])
-                    new_q=qcol.number_input('Quantity',min_value=1,max_value=1000000,value=int(item['quantity']),step=1,key=f"cart_q_{item['product_id']}_{item.get('size_oz') or 'std'}_{abs(hash(item.get('customizations','')))}")
-                    if qcol.button('Update',key=f"update_{item['product_id']}_{item.get('size_oz') or 'std'}_{abs(hash(item.get('customizations','')))}"):
+                    new_q=qcol.number_input('Quantity',min_value=1,max_value=1000000,value=int(item['quantity']),step=1,key=f"cart_q_{item['product_id']}")
+                    if qcol.button('Update',key=f"update_{item['product_id']}"):
                         try:
                             p=db.get_product(item['product_id'])
                             if not p or not p['active']: raise ValueError('This product is no longer available. Remove it from the cart.')
                             if int(new_q)>p['stock']: raise ValueError(f"Only {p['stock']} unit(s) are in stock.")
-                            cart.set_quantity(item['product_id'],int(new_q),item.get('size_oz'),item.get('customizations','')); st.rerun()
+                            cart.set_quantity(item['product_id'],int(new_q)); st.rerun()
                         except Exception as e: safe_error(e)
-                    if rmcol.button('Remove',key=f"remove_{item['product_id']}_{item.get('size_oz') or 'std'}_{abs(hash(item.get('customizations','')))}"):
-                        cart.remove(item['product_id'],item.get('size_oz'),item.get('customizations','')); st.rerun()
+                    if rmcol.button('Remove',key=f"remove_{item['product_id']}"):
+                        cart.remove(item['product_id']); st.rerun()
             st.divider(); st.markdown(f"### Total: {money(cart.total_cents())}")
             st.caption('Inventory is checked again at checkout. No stock is deducted until the sale commits successfully.')
             with st.form('checkout_form'):
-                cashier_label=st.text_input('Cashier name / label',value='Cashier')
-                order_customer=st.text_input('Customer / order label',placeholder='e.g. Walk-in #12 or pickup name')
-                order_priority=st.select_slider('Order priority',options=[1,2,3,4,5],value=3,format_func=lambda x:{1:'1 · Urgent',2:'2 · High',3:'3 · Normal',4:'4 · Low',5:'5 · Flexible'}[x])
-                st.caption('After checkout, food items are sent to Kitchen Queue and drinks are sent to the Drink Queue. Mixed carts are split into both queues.')
-                confirm=st.form_submit_button('Confirm sale + send to queue',type='primary',use_container_width=True)
+                cashier_label=st.text_input('Cashier label (optional)',value='Cashier')
+                confirm=st.form_submit_button('Confirm sale',type='primary',use_container_width=True)
             if confirm:
                 try:
                     sale=db.checkout(cart.items(),cashier_label.strip() or 'Cashier')
-                    customer_label=(order_customer.strip() or f"Sale #{sale['transaction_id']}")[:100]
-                    grouped={'Food':[],'Drink':[]}
-                    for line in sale['items']:
-                        product=next((p for p in products if p['code']==line['code']),None)
-                        category=(product or {}).get('category','').casefold()
-                        name=line['name'].casefold()
-                        is_drink=category.startswith('gulps -') or 'lemonade yakult' in name or 'iskrambol' in name
-                        kind='Drink' if is_drink else 'Food'
-                        size_text=f" {line['size_oz']} oz" if line.get('size_oz') else ''
-                        options_text=f" ({line['customizations']})" if line.get('customizations') else ''
-                        grouped[kind].append(f"{line['quantity']} × {line['name']}{size_text}{options_text}")
-                    queued=[]
-                    for kind,lines in grouped.items():
-                        if lines:
-                            oid=db.add_order(customer_label, (f"Sale #{sale['transaction_id']}: " + '; '.join(lines))[:490], int(order_priority), order_type=kind)
-                            queued.append(f"{kind} queue #{oid}")
-                    db.log_activity('Cashier','Sale sent to queue',f"Sale #{sale['transaction_id']} · {', '.join(queued)} · Priority {order_priority}")
-                    st.session_state.last_sale=sale; cart.clear(); st.success(f"Sale #{sale['transaction_id']} completed — {money(sale['total_cents'])}. Sent to: {', '.join(queued)}."); st.rerun()
+                    st.session_state.last_sale=sale; cart.clear(); st.success(f"Sale #{sale['transaction_id']} completed — {money(sale['total_cents'])}."); st.rerun()
                 except Exception as e: safe_error(e)
         st.markdown('---')
         st.markdown('**Cart data structure:** custom singly linked list')
         st.caption(f'{len(cart)} distinct item(s) · item lookup O(n) · cart total O(n)')
-
-elif mode=='Cashier' and page=='Order Queue':
-    st.subheader('Cashier order queue')
-    st.caption('Cashier assigns priority when sending an order. Priority 1 is most urgent; priority 5 is least urgent. Equal priorities are handled first-in, first-out.')
-    queue_search=st.text_input('Search orders by order number, customer, or details',placeholder='e.g. #12, milkshake, French fries')
-    with st.form('cashier_queue_form', clear_on_submit=True):
-        customer=st.text_input('Customer / order number', placeholder='e.g. Walk-in #12')
-        order_type=st.radio('Send order to', ['Food','Drink'], horizontal=True, help='Food orders appear in Kitchen mode. Drink orders remain visible in the cashier queue.')
-        details=st.text_area('Order details', placeholder='e.g. 2 French fries (cheese), 1 siomai; no onions', max_chars=500)
-        priority=st.select_slider('Priority', options=[1,2,3,4,5], value=3, format_func=lambda x:{1:'1 · Urgent',2:'2 · High',3:'3 · Normal',4:'4 · Low',5:'5 · Flexible'}[x])
-        submit_order=st.form_submit_button('Add to queue', type='primary', use_container_width=True)
-    if submit_order:
-        try:
-            oid=db.add_order(customer,details,int(priority),order_type=order_type)
-            st.success(f'{order_type} order #{oid} added to the queue.')
-            st.rerun()
-        except Exception as e: safe_error(e)
-    orders=db.list_orders(pending_only=True)
-    if queue_search.strip():
-        term=queue_search.casefold()
-        orders=[o for o in orders if term in (str(o['id'])+' '+o['customer_name']+' '+o['details']+' '+o.get('order_type','')).casefold()]
-    if orders:
-        st.markdown('#### Pending orders — priority order')
-        st.dataframe(pd.DataFrame([{'Queue #':o['id'],'Type':o.get('order_type','Food'),'Customer':o['customer_name'],'Order details':o['details'],'Priority':o['priority'],'Queued at':o['created_at'].replace('T',' ')} for o in orders]), use_container_width=True, hide_index=True)
-    else:
-        st.info('No pending orders. Add a food or drink order above.')
-
-elif mode=='Kitchen' and page=='Kitchen Queue':
-    st.subheader('Kitchen — food order queue')
-    st.caption('This screen is for kitchen staff. Food orders are sorted automatically: priority 1 first, then 2–5; ties follow the order creation time.')
-    kitchen_heap=MinHeap()
-    kitchen_orders=db.list_orders(pending_only=True, order_type='Food')
-    for o in kitchen_orders:
-        kitchen_heap.push(HeapEntry(int(o['priority']),int(o['sequence_no']),int(o['id']),o))
-    next_food=kitchen_heap.peek()
-    if next_food:
-        payload=next_food.payload
-        st.info(f"NEXT TO PREPARE · Order #{payload['id']} · {payload['customer_name']} · Priority {next_food.priority}")
-        st.markdown(f"### {payload['details']}")
-        if st.button('Mark next food order ready / completed', type='primary', use_container_width=True):
-            try:
-                db.update_order_status(next_food.order_id,'Completed')
-                st.success(f"Food order #{next_food.order_id} marked completed.")
-                st.rerun()
-            except Exception as e: safe_error(e)
-        st.markdown('#### Kitchen queue')
-        st.dataframe(pd.DataFrame([{'Position':i+1,'Order #':o['id'],'Customer':o['customer_name'],'Food order':o['details'],'Priority':o['priority'],'Time received':o['created_at'].replace('T',' ')} for i,o in enumerate(kitchen_orders)]), use_container_width=True, hide_index=True)
-    else:
-        st.success('Kitchen queue is clear. No pending food orders.')
-    st.caption('Min-Heap: insert O(log n), view next O(1), remove next O(log n).')
 
 elif mode=='Cashier' and page=='Last Transaction':
     st.subheader('Last transaction')
@@ -618,32 +460,8 @@ elif mode=='Cashier' and page=='Last Transaction':
     else:
         st.success(f"Sale #{sale['transaction_id']} · {sale['created_at'].replace('T',' ')}")
         st.metric('Total paid',money(sale['total_cents']))
-        st.dataframe(pd.DataFrame([{'Code':x['code'],'Product':x['name'],'Size':(f"{x.get('size_oz')} oz" if x.get('size_oz') else '—'),'Options':x.get('customizations',''),'Qty':x['quantity'],'Unit price':money(x['unit_price_cents']),'Subtotal':money(x['subtotal_cents'])} for x in sale['items']]),use_container_width=True,hide_index=True)
+        st.dataframe(pd.DataFrame([{'Code':x['code'],'Product':x['name'],'Qty':x['quantity'],'Unit price':money(x['unit_price_cents']),'Subtotal':money(x['subtotal_cents'])} for x in sale['items']]),use_container_width=True,hide_index=True)
         st.caption('The database transaction has committed successfully; inventory and transaction history have been updated.')
-
-elif mode=='Cashier' and page=='History':
-    st.subheader('Cashier history')
-    st.caption('Search completed sales and cashier actions. Records remain saved in SQLite after the app is closed.')
-    h1,h2=st.columns([1,2])
-    cashier_history_search=h1.text_input('Search sales / actions',placeholder='sale number, product, customer')
-    cashier_role_filter=h2.selectbox('History type',['All cashier activity','Completed sales','Queue actions'])
-    sales=db.transaction_history()
-    term=cashier_history_search.casefold().strip()
-    if cashier_role_filter!='Queue actions':
-        sale_rows=[]
-        for r in sales:
-            details=db.transaction_items(r['id'])
-            searchable=f"{r['id']} {r['cashier_label']} "+' '.join(x['product_name']+' '+x.get('customizations','') for x in details)
-            if not term or term in searchable.casefold():
-                sale_rows.append({'Sale #':r['id'],'Date/time':r['created_at'].replace('T',' '),'Cashier':r['cashier_label'],'Items':', '.join(f"{x['quantity']}x {x['product_name']}" for x in details),'Total':money(r['total_cents'])})
-        st.markdown('#### Completed sales')
-        if sale_rows: st.dataframe(pd.DataFrame(sale_rows),use_container_width=True,hide_index=True)
-        else: st.info('No sales match this search.')
-    if cashier_role_filter!='Completed sales':
-        activity=db.activity_history('Cashier',cashier_history_search,limit=500)
-        st.markdown('#### Cashier actions and queue history')
-        if activity: st.dataframe(pd.DataFrame([{'Date/time':r['created_at'].replace('T',' '),'Action':r['action'],'Details':r['details']} for r in activity]),use_container_width=True,hide_index=True)
-        else: st.info('No cashier activity matches this search.')
 
 st.divider()
 st.caption('Gulps & Grubs POS · SQLite is the persistent source of truth · Prices stored as integer centavos')
