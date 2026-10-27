@@ -281,53 +281,33 @@ elif mode == 'Cashier' and page == 'New Sale':
             st.divider(); st.markdown(f"### Total: {money(cart.total_cents())}")
             with st.form('checkout_form'):
                 cashier_label = st.text_input('Cashier label (optional)', value='Cashier')
+                customer_name = st.text_input('Customer name *', placeholder='e.g. John Doe')
+                priority_level = st.select_slider(
+                    'Priority Level',
+                    options= [1,2,3,4,5],
+                    value=3,
+                    format_func=lambda x: {1: '1 · Urgent', 2: '2 · High', 3: '3 · Normal', 4: '4 · Low', 5: '5 · Flexible'}[x]
+                )
                 confirm = st.form_submit_button('Confirm sale', type='primary', use_container_width=True)
             if confirm:
                 try:
+                    if not customer_name.strip():
+                        raise ValueError("Please enter the customer name.")
+
+                    # 1. Complete POS Checkout
                     sale = db.checkout(cart.items(), cashier_label.strip() or 'Cashier')
-                    st.session_state.last_sale = sale; cart.clear(); st.success(f"Sale #{sale['transaction_id']} completed — {money(sale['total_cents'])}."); st.rerun()
-                except Exception as e: safe_error(e)
+                    st.session_state.last_sale = sale
 
-elif mode == 'Cashier' and page == 'Pickup Queue Priority':
-    st.subheader('Cashier - Order Priority & Pickup Queue')
-    st.caption('Cashiers can set order priority levels: Priority 1 is most urgent (handles first), Priority 5 is least urgent/flexible.')
-    
-    with st.form('new_order_form', clear_on_submit=True):
-        customer = st.text_input('Customer name *')
-        details = st.text_input('Order details *', placeholder='e.g. 2 Milk Teas, 1 Waffle')
-        priority = st.select_slider('Set Priority Level', options=[1, 2, 3, 4, 5], value=3, 
-                                    format_func=lambda x: {1: '1 · Urgent', 2: '2 · High', 3: '3 · Normal', 4: '4 · Low', 5: '5 · Flexible'}[x])
-        add_order_btn = st.form_submit_button('Add Priority Order to Queue', type='primary')
-    
-    if add_order_btn:
-        try:
-            if not customer or not details:
-                raise ValueError("Customer name and order details are required.")
-            oid = db.add_order(customer, details, int(priority))
-            st.success(f'Order #{oid} added with Priority {priority}.')
-            st.rerun()
-        except Exception as e: safe_error(e)
+                    # 2. Add to Pickup Queue
+                    order_details_str = ", ".join([f"{item['quantity']}x {item['name']}" for item in cart.items()])
+                    db.add_order(customer_name.strip(), order_details_str, int(priority_level))
 
-    st.divider()
-    heap = rebuild_heap()
-    next_order = heap.peek()
-    
-    if next_order:
-        st.markdown("### 🔔 Next Priority Order in Queue")
-        st.info(f"**Order #{next_order.order_id}** — {next_order.payload['customer_name']} | **Priority Level:** {next_order.priority} | **Details:** {next_order.payload['details']}")
-        if st.button('Mark Next Order Completed', type='primary'):
-            try:
-                db.update_order_status(next_order.order_id, 'Completed')
-                st.success(f'Order #{next_order.order_id} marked as completed.')
-                st.rerun()
-            except Exception as e: safe_error(e)
-    else:
-        st.success('No pending pickup orders in queue.')
-
-    st.markdown("#### All Pending Pickup Orders")
-    all_orders = db.list_orders()
-    if all_orders:
-        st.dataframe(pd.DataFrame([{'Order #': o['id'], 'Customer': o['customer_name'], 'Details': o['details'], 'Priority': o['priority'], 'Status': o['status'], 'Created': o['created_at'].replace('T', ' ')} for o in all_orders]), use_container_width=True, hide_index=True)
+                    # 3. Clear cart & refresh
+                    cart.clear()
+                    st.success(f"Sale #{sale['transaction_id']} completed & added to pickup queue — {money(sale['total_cents'])}.")
+                    st.rerun()
+                except Exception as e:
+                    safe_error(e)
 
 elif mode == 'Cashier' and page == 'Last Transaction':
     st.subheader('Last Transaction')
