@@ -74,11 +74,11 @@ def calculate_available_servings(product_id):
         conn = db.get_connection()
         cursor = conn.cursor()
         
-        # Check if recipes table exists and fetch raw ingredients
+        # Verify recipes table exists
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='recipes'")
         if not cursor.fetchone():
             conn.close()
-            return "N/A (No recipe set)"
+            return None  # Fallback to direct product stock
 
         cursor.execute('''
             SELECT p.stock, r.amount_needed 
@@ -91,12 +91,12 @@ def calculate_available_servings(product_id):
         conn.close()
         
         if not ingredients:
-            return "N/A (No recipe set)"
+            return None  # Fallback to direct product stock
         
         possible_servings = [int(stock // amount) for stock, amount in ingredients if amount > 0]
         return min(possible_servings) if possible_servings else 0
     except Exception:
-        return "N/A"
+        return None
     possible_servings = [int(stock // amount) for stock, amount in ingredients if amount > 0]
     return min(possible_servings) if possible_servings else 0
     
