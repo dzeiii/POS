@@ -34,10 +34,15 @@ def generate_category_product_code(category):
         'Donut and Waffles': 'GRB-WAF',
         'Dim Sum': 'GRB-DSM',
         'Others': 'GRB-OTH',
-        'Gulps': 'GUL',
-        'Grubs': 'GRB',
-        'Raw Materials': 'RAW',
-        'Packaging': 'PKG',
+        # Inventory Supply Categories
+        'powder': 'POW',
+        'drinking cups': 'CUP-DRK',
+        'food cups': 'CUP-FD',
+        'square plates': 'PLT-SQ',
+        'takeout boxes big': 'BOX-BG',
+        'takeout boxes small': 'BOX-SM',
+        'lids flat': 'LID-FLT',
+        'lids dome': 'LID-DOM',
         'Other': 'OTH',
     }
     prefix = category_prefixes.get(category, 'OTH')
@@ -48,7 +53,7 @@ def generate_category_product_code(category):
         for product in existing_products
     }
 
-    pattern = re.compile(rf"^{re.escape(prefix)}-(\\d+)$", re.IGNORECASE)
+    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$", re.IGNORECASE)
     used_numbers = []
     for existing_code in existing_codes:
         match = pattern.fullmatch(existing_code)
@@ -511,17 +516,22 @@ elif mode == 'Cashier' and page == 'Last Transaction':
 
 
 # ==========================================
-# MODE 3: INVENTORY MANAGER (Supplies, Ingredients & Products)
+# MODE 3: INVENTORY MANAGER (Supplies & Raw Materials)
 # ==========================================
 elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
-    st.subheader('Inventory Overview')
+    st.subheader('Inventory Stock Overview')
     all_products = db.list_products(active_only=True)
 
-    # Separate raw materials/packaging from finished menu items
-    raw_supplies = [p for p in all_products if p['category'] in ['Raw Materials', 'Packaging']]
-    finished_products = [p for p in all_products if p['category'] not in ['Raw Materials', 'Packaging']]
+    inventory_categories = [
+        'powder', 'drinking cups', 'food cups', 'square plates', 
+        'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
+    ]
 
-    tab_raw, tab_finished = st.tabs(['📦 Raw Materials & Packaging', '🥤 Finished Menu Products'])
+    # Separate raw materials/supplies from menu products
+    raw_supplies = [p for p in all_products if p['category'] in inventory_categories]
+    finished_products = [p for p in all_products if p['category'] not in inventory_categories]
+
+    tab_raw, tab_finished = st.tabs(['📦 Raw Materials & Packaging', '🥤 Menu Products'])
 
     with tab_raw:
         st.markdown('#### Raw Ingredients & Packaging Supplies')
@@ -540,7 +550,7 @@ elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
                 hide_index=True
             )
         else:
-            st.info('No active raw materials or packaging items found in the inventory.')
+            st.info('No active supply items found in the inventory.')
 
     with tab_finished:
         st.markdown('#### Finished Menu Product Stocks')
@@ -560,7 +570,7 @@ elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
                 hide_index=True
             )
         else:
-            st.info('No active finished products found in the inventory.')
+            st.info('No active menu products found in the inventory.')
 
 elif mode == 'Inventory Manager' and page == 'Restock Supplies':
     st.subheader('Restock Inventory & Supplies')
@@ -568,7 +578,7 @@ elif mode == 'Inventory Manager' and page == 'Restock Supplies':
     if active_products:
         options = {f"{p['code']} — {p['name']} (Category: {p['category']} | Current Stock: {p['stock']})": p for p in active_products}
         with st.form('restock_form'):
-            chosen = st.selectbox('Select item/powder/cup/product to restock', list(options))
+            chosen = st.selectbox('Select supply item to restock', list(options))
             qty = st.number_input('Quantity to add', min_value=1, max_value=1000000, value=10, step=1)
             restock = st.form_submit_button('Record Restock', type='primary')
         if restock:
@@ -582,12 +592,17 @@ elif mode == 'Inventory Manager' and page == 'Restock Supplies':
         st.info('No active supply items available to restock.')
 
 elif mode == 'Inventory Manager' and page == 'Supply Catalog':
-    st.subheader('Raw Supply & Ingredient Catalog')
+    st.subheader('Supply & Ingredient Catalog')
     products = db.list_products()
     
+    inventory_categories = [
+        'powder', 'drinking cups', 'food cups', 'square plates', 
+        'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
+    ]
+
     with st.form('add_supply_form', clear_on_submit=True):
-        raw_name = st.text_input('Raw Item Name *', placeholder='e.g. Taro Powder (1kg), 16oz Plastic Cups').strip()
-        raw_cat = st.selectbox('Supply Category', ['Raw Materials', 'Packaging'])
+        raw_name = st.text_input('Supply Item Name *', placeholder='e.g. Taro Powder (1kg), 16oz Drinking Cup').strip()
+        raw_cat = st.selectbox('Supply Category', inventory_categories)
         
         c1, c2 = st.columns(2)
         raw_stock = c1.number_input('Starting Stock', min_value=0, max_value=1000000, value=0, step=1)
@@ -613,11 +628,11 @@ elif mode == 'Inventory Manager' and page == 'Supply Catalog':
                     code,
                     raw_name,
                     raw_cat,
-                    0,  # ₱0.00 since raw ingredients aren't sold individually at checkout
+                    0,  # ₱0.00 price for raw materials
                     int(raw_stock),
                     int(raw_threshold)
                 )
-                st.success(f"Supply item '{raw_name}' added successfully with code {code}.")
+                st.success(f"Supply item '{raw_name}' added successfully under '{raw_cat}' with code {code}.")
                 st.rerun()
 
         except Exception as e:
