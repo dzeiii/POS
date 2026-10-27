@@ -361,19 +361,19 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
     
             selected_size = None  # Default size if not applicable
 
-                if product_group == 'Gulps':
-                    category = st.selectbox('Gulps category', ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee'])
+            if product_group == 'Gulps':
+                category = st.selectbox('Gulps category', ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee'])
                 
                 # Drink Size Selection Logic
-                    if category in ['Milkshake', 'Lemonades', 'Lemonade Slushie', 'Coffee', 'Milktea']:
-                        selected_size = st.selectbox('Drink Size', ['12oz', '16oz'], index=1)
-                    elif category == 'Floats':
-                        selected_size = st.selectbox('Drink Size', ['8oz', '12oz', '16oz'], index=1)
-        
-                elif product_group == 'Grubs':
-                    category = st.selectbox('Grubs category', ['Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others'])
-                else:
-                    category = 'Other'
+                if category in ['Milkshake', 'Lemonades', 'Lemonade Slushie', 'Coffee', 'Milktea']:
+                    selected_size = st.selectbox('Drink Size', ['12oz', '16oz'], index=1)
+                elif category == 'Floats':
+                    selected_size = st.selectbox('Drink Size', ['8oz', '12oz', '16oz'], index=1)
+            
+            elif product_group == 'Grubs':
+                category = st.selectbox('Grubs category', ['Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others'])
+            else:
+                category = 'Other'
 
         c2, c3, c4 = st.columns(3)
         price = c2.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=0.00, step=0.5, format='%.2f')
