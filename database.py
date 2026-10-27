@@ -25,6 +25,14 @@ def connection(db_path=DB_PATH):
 def init_db(db_path=DB_PATH):
     with connection(db_path) as c:
         c.executescript('''
+        CREATE TABLE IF NOT EXISTS recipes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        ingredient_id INTEGER NOT NULL,
+        amount_needed REAL NOT NULL,
+        FOREIGN KEY (product_id) REFERENCES products(id),
+        FOREIGN KEY (ingredient_id) REFERENCES products(id)
+        );
         CREATE TABLE IF NOT EXISTS products (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           code TEXT NOT NULL COLLATE NOCASE UNIQUE,
@@ -314,7 +322,6 @@ def log_activity(actor_mode, action, details='', db_path=DB_PATH):
         c.execute('INSERT INTO activity_history(actor_mode,action,details,created_at) VALUES(?,?,?,?)',
                   (actor_mode, action, details, datetime.now().isoformat(timespec='seconds')))
 
-
 def activity_history(actor_mode=None, search_text='', limit=500, db_path=DB_PATH):
     sql='SELECT * FROM activity_history WHERE 1=1'; params=[]
     if actor_mode and actor_mode != 'All':
@@ -325,10 +332,43 @@ def activity_history(actor_mode=None, search_text='', limit=500, db_path=DB_PATH
     with connection(db_path) as c:
         return [dict(r) for r in c.execute(sql,params).fetchall()]
 
-
 def seed_sample_products(db_path=DB_PATH):
     with connection(db_path) as c: count=c.execute('SELECT COUNT(*) FROM products').fetchone()[0]
     if count: return 0
     samples=[('DRK-001','Iced Coffee','Beverage',7500,12,4),('DRK-002','Classic Milk Tea','Beverage',8500,8,3),('SNK-001','Chocolate Chip Cookie','Snack',3500,20,5),('SNK-002','Cheese Sandwich','Food',6500,6,3),('DRK-003','Bottled Water','Beverage',2000,18,5)]
     for p in samples: add_product(*p,db_path=db_path)
     return len(samples)
+
+# In database.py
+def checkout_with_recipe_deduction(cart_items, cashier_label):
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # 1. Record Sale
+    total_cents = sum(item['subtotal_cents'] for item in cart_items)
+    cursor.execute(
+        "INSERT INTO transactions (total_cents, cashier_label, created_at) VALUES (?, ?, ?)",
+        (total_cents, cashier_label, datetime.now().isoformat())
+    )
+    transaction_id = cursor.lastrowid
+
+    for item in cart_items:
+        # Record transaction line item
+        cursor.execute(
+            "INSERT INTO transaction_items (transaction_id, product_id, quantity, unit_price_cents, subtotal_cents) VALUES (?, ?, ?, ?, ?)",
+            (transaction_id, item['product_id'], item['quantity'], item['unit_price_cents'], item['subtotal_cents'])
+        )
+        
+        # Deduct direct product stock if applicable
+        cursor.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (item['quantity'], item['product_id']))
+
+        # 2. AUTOMATICALLY DEDUCT RAW INGREDIENTS (Powders, Cups, Lids)
+        cursor.execute("SELECT ingredient_id, amount_needed FROM recipes WHERE product_id = ?", (item['product_id'],))
+        recipe_ingredients = cursor.fetchall()
+        
+        for ing_id, amount_needed in recipe_ingredients:
+            total_deduction = amount_needed * item['quantity']
+            cursor.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (total_deduction, ing_id))
+
+    conn.commit()
+    conn.close()
