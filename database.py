@@ -195,10 +195,12 @@ def update_product(product_id, code, name, category, price_cents, threshold, db_
         if 'products.code' in str(e).lower(): raise ValueError('That product code already exists.') from e
         raise
 
-def deactivate_product(product_id, db_path=DB_PATH):
-    with connection(db_path) as c:
-        cur=c.execute('UPDATE products SET active=0,updated_at=? WHERE id=? AND active=1', (datetime.now().isoformat(timespec='seconds'),product_id))
-        if cur.rowcount != 1: raise ValueError('Product not found or already inactive.')
+def delete_product(product_id):
+    """Permanently delete a product from the database."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
+        conn.commit()
 
 def restock_product(product_id, quantity, db_path=DB_PATH):
     if isinstance(quantity,bool) or not isinstance(quantity,int) or quantity<1: raise ValueError('Restock quantity must be a positive whole number.')
