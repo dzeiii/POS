@@ -310,7 +310,12 @@ elif mode == 'Cashier' and page == 'New Sale':
                     safe_error(e)
 elif mode == 'Cashier' and page == 'Pickup Queue Priority':
     st.subheader('Cashier - Order Priority & Pickup Queue')
-    st.caption('Cashiers can set order priority levels: Priority 1 is most urgent (handles first), Priority 5 is least urgent/flexible.')
+    st.caption('Orders are automatically added to this priority queue upon finalizing sales at checkout.')
+
+    # Rebuild heap from pending database orders
+    heap = rebuild_heap()
+    next_order = heap.peek()
+    
     if next_order:
         st.markdown("### 🔔 Next Priority Order in Queue")
         st.info(f"**Order #{next_order.order_id}** — {next_order.payload['customer_name']} | **Priority Level:** {next_order.priority} | **Details:** {next_order.payload['details']}")
@@ -326,8 +331,23 @@ elif mode == 'Cashier' and page == 'Pickup Queue Priority':
     st.markdown("#### All Pending Pickup Orders")
     all_orders = db.list_orders()
     if all_orders:
-        st.dataframe(pd.DataFrame([{'Order #': o['id'], 'Customer': o['customer_name'], 'Details': o['details'], 'Priority': o['priority'], 'Status': o['status'], 'Created': o['created_at'].replace('T', ' ')} for o in all_orders]), use_container_width=True, hide_index=True)
-
+        st.dataframe(
+            pd.DataFrame([
+                {
+                    'Order #': o['id'], 
+                    'Customer': o['customer_name'], 
+                    'Details': o['details'], 
+                    'Priority': o['priority'], 
+                    'Status': o['status'], 
+                    'Created': o['created_at'].replace('T', ' ')
+                } for o in all_orders
+            ]), 
+            use_container_width=True, 
+            hide_index=True
+        )
+    else:
+        st.info('No pickup orders found in the database.')
+        
 elif mode == 'Cashier' and page == 'Last Transaction':
     st.subheader('Last Transaction')
     sale = st.session_state.last_sale
