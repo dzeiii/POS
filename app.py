@@ -452,21 +452,34 @@ elif mode == 'Cashier' and page == 'New Sale':
             cols = st.columns(2)
             for col, p in zip(cols, shown[start_idx:start_idx+2]):
                 with col:
+                    # 1. Calculate available servings from raw ingredients/powders
+                    available_servings = calculate_available_servings(p['id'])
+                    
+                    # If a recipe exists, use calculated servings; otherwise fall back to direct stock
+                    if isinstance(available_servings, int):
+                        display_stock = available_servings
+                    else:
+                        display_stock = p['stock']
+
                     st.markdown(
                         f"<div class='product-card'><b>{p['name']}</b><br>"
                         f"<span class='small-note'>{p['code']} · {p['category']}</span>"
                         f"<h3>{money(p['price_cents'])}</h3>"
-                        f"<span class='small-note'>In stock: {p['stock']}</span></div>", 
+                        f"<span class='small-note'>In stock / Servings: {display_stock}</span></div>", 
                         unsafe_allow_html=True
                     )
                     with st.form(f"add_cart_{p['id']}"):
-                        qty = st.number_input('Qty', min_value=1, max_value=max(1, int(p['stock'])), value=1, step=1, key=f"qty_{p['id']}", disabled=p['stock'] < 1)
-                        add = st.form_submit_button('Add to cart', use_container_width=True, disabled=p['stock'] < 1)
+                        qty = st.number_input('Qty', min_value=1, max_value=max(1, int(display_stock)), value=1, step=1, key=f"qty_{p['id']}", disabled=display_stock < 1)
+                        add = st.form_submit_button('Add to cart', use_container_width=True, disabled=display_stock < 1)
                     if add:
                         try:
-                            if qty > p['stock']: raise ValueError(f"Only {p['stock']} unit(s) are in stock.")
-                            st.session_state.cart.add(p, int(qty)); st.success(f"Added {qty} × {p['name']}."); st.rerun()
-                        except Exception as e: safe_error(e)
+                            if qty > display_stock: 
+                                raise ValueError(f"Only {display_stock} serving(s) available based on raw ingredients.")
+                            st.session_state.cart.add(p, int(qty))
+                            st.success(f"Added {qty} × {p['name']}.")
+                            st.rerun()
+                        except Exception as e: 
+                            safe_error(e)
     with right:
         st.markdown('#### Shopping cart')
         cart = st.session_state.cart
