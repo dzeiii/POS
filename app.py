@@ -36,6 +36,8 @@ def generate_category_product_code(category):
         'Others': 'GRB-OTH',
         'Gulps': 'GUL',
         'Grubs': 'GRB',
+        'Raw Materials': 'RAW',
+        'Packaging': 'PKG',
         'Other': 'OTH',
     }
     prefix = category_prefixes.get(category, 'OTH')
@@ -173,7 +175,7 @@ with st.container(key='site_header'):
         elif mode == 'Cashier':
             page = st.radio('Cashier navigation', ['New Sale', 'Pickup Queue Priority', 'Last Transaction'], horizontal=True, key='cashier_page', label_visibility='collapsed')
         elif mode == 'Inventory Manager':
-            page = st.radio('Inventory navigation', ['Stock Overview', 'Restock'], horizontal=True, key='inventory_page', label_visibility='collapsed')
+            page = st.radio('Inventory navigation', ['Raw Stock Overview', 'Restock Supplies', 'Supply Catalog'], horizontal=True, key='inventory_page', label_visibility='collapsed')
 
 # Rebuild AVL tree on each run
 try: product_tree = rebuild_tree()
@@ -208,6 +210,16 @@ if mode == 'Admin' and page == 'Dashboard':
         recent = db.transaction_history()[:6]
         if recent: st.dataframe(pd.DataFrame([{'Sale #': r['id'], 'Date': r['created_at'].replace('T', ' '), 'Total': money(r['total_cents'])} for r in recent]), use_container_width=True, hide_index=True)
         else: st.info('Completed sales will appear here.')
+
+    st.markdown('#### Sales over the last 7 days')
+    daily = []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        s = datetime.combine(day, time.min).isoformat()
+        e = datetime.combine(day + timedelta(days=1), time.min).isoformat()
+        sm = db.sales_summary(s, e)
+        daily.append({'Date': day.strftime('%b %d'), 'Revenue (₱)': sm['revenue_cents'] / 100})
+    st.bar_chart(pd.DataFrame(daily).set_index('Date'))
 
 elif mode == 'Admin' and page == 'Product Management':
     st.subheader('Product Catalog Management')
@@ -366,6 +378,7 @@ elif mode == 'Admin' and page == 'Sales History':
             chosen = st.selectbox('View sale details', [r['id'] for r in rows], format_func=lambda x: f"Sale #{x}")
             details = db.transaction_items(chosen)
             st.dataframe(pd.DataFrame([{'Code': x['product_code'], 'Product': x['product_name'], 'Qty': x['quantity'], 'Unit price': money(x['unit_price_cents']), 'Subtotal': money(x['subtotal_cents'])} for x in details]), use_container_width=True, hide_index=True)
+            st.download_button('Download filtered sales CSV', pd.DataFrame([{'sale_id': r['id'], 'created_at': r['created_at'], 'cashier': r['cashier_label'], 'total_php': r['total_cents'] / 100} for r in rows]).to_csv(index=False).encode('utf-8'), 'sales_history.csv', 'text/csv')
         else: st.info('No transactions were found for the selected dates.')
 
 
@@ -500,8 +513,8 @@ elif mode == 'Cashier' and page == 'Last Transaction':
 # ==========================================
 # MODE 3: INVENTORY MANAGER (Supplies/Ingredients only, no sizes)
 # ==========================================
-elif mode == 'Inventory Manager' and page == 'Stock Overview':
-    st.subheader('Stock Overview (Ingredients & Supplies)')
+elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
+    st.subheader('Raw Ingredients & Packaging Stock Overview')
     products = db.list_products(active_only=True)
     if products:
         st.dataframe(
@@ -518,10 +531,10 @@ elif mode == 'Inventory Manager' and page == 'Stock Overview':
             hide_index=True
         )
     else:
-        st.info('No active items available in the inventory.')
+        st.info('No active raw items or packaging available in the inventory.')
 
-elif mode == 'Inventory Manager' and page == 'Restock':
-    st.subheader('Restock Inventory')
+elif mode == 'Inventory Manager' and page == 'Restock Supplies':
+    st.subheader('Restock Inventory & Supplies')
     active_products = db.list_products(active_only=True)
     if active_products:
         options = {f"{p['code']} — {p['name']} (Current Stock: {p['stock']})": p for p in active_products}
@@ -537,7 +550,49 @@ elif mode == 'Inventory Manager' and page == 'Restock':
             except Exception as e:
                 safe_error(e)
     else:
-        st.info('No active items available to restock.')
+        st.info('No active supply items available to restock.')
+
+elif mode == 'Inventory Manager' and page == 'Supply Catalog':
+    st.subheader('Raw Supply & Ingredient Catalog')
+    products = db.list_products()
+    
+    with st.form('add_supply_form', clear_on_submit=True):
+        raw_name = st.text_input('Raw Item Name *', placeholder='e.g. Taro Powder (1kg), 16oz Plastic Cups').strip()
+        raw_cat = st.selectbox('Supply Category', ['Raw Materials', 'Packaging', 'Others'])
+        
+        c1, c2 = st.columns(2)
+        raw_stock = c1.number_input('Starting Stock', min_value=0, max_value=1000000, value=0, step=1)
+        raw_threshold = c2.number_input('Low-stock Alert at', min_value=0, max_value=1000000, value=5, step=1)
+        
+        submitted_supply = st.form_submit_button('Add Supply Item', type='primary', use_container_width=True)
+
+    if submitted_supply:
+        try:
+            if not raw_name:
+                raise ValueError('Please enter a supply item name.')
+
+            existing_item = next(
+                (p for p in products if p['name'].strip().casefold() == raw_name.strip().casefold()), 
+                None
+            )
+
+            if existing_item:
+                st.error(f"A supply item named '{raw_name}' already exists (Code: {existing_item['code']}).")
+            else:
+                code = generate_category_product_code(raw_cat)
+                db.add_product(
+                    code,
+                    raw_name,
+                    raw_cat,
+                    0,  # ₱0.00 since raw ingredients aren't sold individually at POS checkout
+                    int(raw_stock),
+                    int(raw_threshold)
+                )
+                st.success(f"Supply item '{raw_name}' added successfully with code {code}.")
+                st.rerun()
+
+        except Exception as e:
+            safe_error(e)
 
 st.divider()
 st.caption('Gulps & Grubs POS · SQLite persistent database · 3 Workspace Modes')
