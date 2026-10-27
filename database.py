@@ -26,13 +26,15 @@ def init_db(db_path=DB_PATH):
     with connection(db_path) as c:
         c.executescript('''
         CREATE TABLE IF NOT EXISTS recipes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        product_id INTEGER NOT NULL,
-        ingredient_id INTEGER NOT NULL,
-        amount_needed REAL NOT NULL,
-        FOREIGN KEY (product_id) REFERENCES products(id),
-        FOREIGN KEY (ingredient_id) REFERENCES products(id)
-        );
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            ingredient_id INTEGER NOT NULL,
+            amount_needed REAL NOT NULL,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+            FOREIGN KEY (ingredient_id) REFERENCES products(id) ON DELETE CASCADE,
+            UNIQUE(product_id, ingredient_id)
+        )
+    c.execute('CREATE INDEX IF NOT EXISTS idx_recipes_product ON recipes(product_id);')
         CREATE TABLE IF NOT EXISTS products (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           code TEXT NOT NULL COLLATE NOCASE UNIQUE,
@@ -96,6 +98,8 @@ def init_db(db_path=DB_PATH):
         );
         -- Migrate older databases without losing existing transactions.
         ''')
+        
+        
         order_columns = {r['name'] for r in c.execute('PRAGMA table_info(pending_orders)').fetchall()}
         if 'order_type' not in order_columns:
             c.execute("ALTER TABLE pending_orders ADD COLUMN order_type TEXT NOT NULL DEFAULT 'Food'")
@@ -352,23 +356,72 @@ def checkout_with_recipe_deduction(cart_items, cashier_label):
     )
     transaction_id = cursor.lastrowid
 
-    for item in cart_items:
-        # Record transaction line item
-        cursor.execute(
-            "INSERT INTO transaction_items (transaction_id, product_id, quantity, unit_price_cents, subtotal_cents) VALUES (?, ?, ?, ?, ?)",
-            (transaction_id, item['product_id'], item['quantity'], item['unit_price_cents'], item['subtotal_cents'])
-        )
-        
-        # Deduct direct product stock if applicable
-        cursor.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (item['quantity'], item['product_id']))
+    # Inside checkout() function in database.py:
+    for item in items:
+        pid = item['product_id']
+        qty = item['quantity']
 
-        # 2. AUTOMATICALLY DEDUCT RAW INGREDIENTS (Powders, Cups, Lids)
-        cursor.execute("SELECT ingredient_id, amount_needed FROM recipes WHERE product_id = ?", (item['product_id'],))
-        recipe_ingredients = cursor.fetchall()
-        
-        for ing_id, amount_needed in recipe_ingredients:
-            total_deduction = amount_needed * item['quantity']
-            cursor.execute("UPDATE products SET stock = stock - ? WHERE id = ?", (total_deduction, ing_id))
+        # 1. Deduct direct stock if applicable
+        c.execute("UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?", (qty, pid))
 
-    conn.commit()
-    conn.close()
+        # 2. Automatically deduct linked recipe ingredients (powders, cups, lids)
+        recipe_items = c.execute(
+            "SELECT ingredient_id, amount_needed FROM recipes WHERE product_id = ?", (pid,)
+        ).fetchall()
+
+        for ing in recipe_items:
+            total_deduct = ing['amount_needed'] * qty
+            c.execute(
+                "UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?", 
+                (total_deduct, ing['ingredient_id'])
+            )
+    # ==========================================
+# RECIPE / BOM MANAGEMENT FUNCTIONS
+# ==========================================
+
+def add_recipe_ingredient(product_id, ingredient_id, amount_needed, db_path=DB_PATH):
+    """Add or update an ingredient requirement for a menu product."""
+    if amount_needed <= 0:
+        raise ValueError("Amount needed must be greater than zero.")
+    with connection(db_path) as c:
+        c.execute('''
+            INSERT INTO recipes (product_id, ingredient_id, amount_needed)
+            VALUES (?, ?, ?)
+            ON CONFLICT(product_id, ingredient_id) DO UPDATE SET amount_needed = excluded.amount_needed
+        ''', (product_id, ingredient_id, amount_needed))
+
+
+def get_product_recipe(product_id, db_path=DB_PATH):
+    """Retrieve all linked raw ingredients for a specific menu product."""
+    with connection(db_path) as c:
+        rows = c.execute('''
+            SELECT r.id, p.name AS ingredient_name, p.category, r.amount_needed, p.id AS ingredient_id, p.stock
+            FROM recipes r
+            JOIN products p ON r.ingredient_id = p.id
+            WHERE r.product_id = ?
+        ''', (product_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_recipe_ingredient(recipe_id, db_path=DB_PATH):
+    """Remove a specific ingredient link from a recipe."""
+    with connection(db_path) as c:
+        c.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,))
+
+
+def calculate_available_servings(product_id, db_path=DB_PATH):
+    """Calculate maximum servings possible based on raw inventory stock."""
+    with connection(db_path) as c:
+        rows = c.execute('''
+            SELECT p.stock, r.amount_needed 
+            FROM recipes r
+            JOIN products p ON r.ingredient_id = p.id
+            WHERE r.product_id = ?
+        ''', (product_id,)).fetchall()
+        
+        if not rows:
+            return None  # No recipe defined
+            
+        possible = [int(r['stock'] // r['amount_needed']) for r in rows if r['amount_needed'] > 0]
+        return min(possible) if possible else 0
+        
