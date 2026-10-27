@@ -401,7 +401,7 @@ elif mode=='Admin' and page=='Products & Inventory':
                     new_name=ec2.text_input('Product name',value=p['name']).strip()
                     edit_categories=['Milkshake','Milktea','Lemonades','Lemonade Slushie','Floats','Coffee','Streetfoods','Donut and Waffles','Dim Sum','Others','Gulps','Grubs','Other']
                     new_cat=st.selectbox('Category',edit_categories,index=edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other'))
-                    ec3,ec4,ec5=st.columns(2)
+                    ec3,ec4,ec5=st.columns(3)
                     new_price=ec3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=p['price_cents']/100,step=0.5,format='%.2f')
                     new_stock = ec4.number_input('Stock', min_value=0, max_value=1000000, value=p['stock'], step=1)
                     new_threshold=ec5.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=p['low_stock_threshold'],step=1)
