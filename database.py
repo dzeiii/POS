@@ -25,84 +25,98 @@ def connection(db_path=DB_PATH):
 def init_db(db_path=DB_PATH):
     with connection(db_path) as c:
         c.executescript('''
-        CREATE TABLE IF NOT EXISTS recipes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER NOT NULL,
-            ingredient_id INTEGER NOT NULL,
-            amount_needed REAL NOT NULL,
-            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-            FOREIGN KEY (ingredient_id) REFERENCES products(id) ON DELETE CASCADE,
-            UNIQUE(product_id, ingredient_id)
-        )
-    c.execute('CREATE INDEX IF NOT EXISTS idx_recipes_product ON recipes(product_id);')
-        CREATE TABLE IF NOT EXISTS products (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          code TEXT NOT NULL COLLATE NOCASE UNIQUE,
-          name TEXT NOT NULL COLLATE NOCASE,
-          category TEXT NOT NULL,
-          price_cents INTEGER NOT NULL CHECK(price_cents >= 0),
-          stock INTEGER NOT NULL CHECK(stock >= 0),
-          low_stock_threshold INTEGER NOT NULL DEFAULT 5 CHECK(low_stock_threshold >= 0),
-          active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS transactions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          total_cents INTEGER NOT NULL CHECK(total_cents >= 0),
-          created_at TEXT NOT NULL,
-          cashier_label TEXT NOT NULL DEFAULT 'Cashier'
-        );
-        CREATE TABLE IF NOT EXISTS product_sizes (
-          product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-          size_oz INTEGER NOT NULL CHECK(size_oz IN (8,12,16)),
-          price_cents INTEGER NOT NULL CHECK(price_cents >= 0),
-          PRIMARY KEY(product_id, size_oz)
-        );
-        CREATE TABLE IF NOT EXISTS transaction_items (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          transaction_id INTEGER NOT NULL REFERENCES transactions(id),
-          product_id INTEGER REFERENCES products(id),
-          product_code TEXT NOT NULL,
-          product_name TEXT NOT NULL,
-          unit_price_cents INTEGER NOT NULL CHECK(unit_price_cents >= 0),
-          quantity INTEGER NOT NULL CHECK(quantity > 0),
-          subtotal_cents INTEGER NOT NULL CHECK(subtotal_cents >= 0),
-          size_oz INTEGER CHECK(size_oz IN (8,12,16) OR size_oz IS NULL),
-          customizations TEXT NOT NULL DEFAULT ''
-        );
-        CREATE TABLE IF NOT EXISTS inventory_movements (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          product_id INTEGER NOT NULL REFERENCES products(id),
-          quantity_change INTEGER NOT NULL,
-          reason TEXT NOT NULL,
-          created_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS activity_history (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          actor_mode TEXT NOT NULL CHECK(actor_mode IN ('Admin','Cashier','Kitchen','System')),
-          action TEXT NOT NULL,
-          details TEXT NOT NULL DEFAULT '',
-          created_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS pending_orders (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          customer_name TEXT NOT NULL,
-          details TEXT NOT NULL,
-          order_type TEXT NOT NULL DEFAULT 'Food' CHECK(order_type IN ('Food','Drink','Pickup')),
-          priority INTEGER NOT NULL CHECK(priority BETWEEN 1 AND 5),
-          sequence_no INTEGER NOT NULL UNIQUE,
-          status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN ('Pending','Completed','Cancelled')),
-          created_at TEXT NOT NULL,
-          completed_at TEXT
-        );
-        -- Migrate older databases without losing existing transactions.
+            CREATE TABLE IF NOT EXISTS recipes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL,
+                ingredient_id INTEGER NOT NULL,
+                amount_needed REAL NOT NULL,
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY (ingredient_id) REFERENCES products(id) ON DELETE CASCADE,
+                UNIQUE(product_id, ingredient_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                name TEXT NOT NULL COLLATE NOCASE,
+                category TEXT NOT NULL,
+                price_cents INTEGER NOT NULL CHECK(price_cents >= 0),
+                stock INTEGER NOT NULL CHECK(stock >= 0),
+                low_stock_threshold INTEGER NOT NULL DEFAULT 5 CHECK(low_stock_threshold >= 0),
+                active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                total_cents INTEGER NOT NULL CHECK(total_cents >= 0),
+                created_at TEXT NOT NULL,
+                cashier_label TEXT NOT NULL DEFAULT 'Cashier'
+            );
+
+            CREATE TABLE IF NOT EXISTS product_sizes (
+                product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                size_oz INTEGER NOT NULL CHECK(size_oz IN (8,12,16)),
+                price_cents INTEGER NOT NULL CHECK(price_cents >= 0),
+                PRIMARY KEY(product_id, size_oz)
+            );
+
+            CREATE TABLE IF NOT EXISTS transaction_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                transaction_id INTEGER NOT NULL REFERENCES transactions(id),
+                product_id INTEGER REFERENCES products(id),
+                product_code TEXT NOT NULL,
+                product_name TEXT NOT NULL,
+                unit_price_cents INTEGER NOT NULL CHECK(unit_price_cents >= 0),
+                quantity INTEGER NOT NULL CHECK(quantity > 0),
+                subtotal_cents INTEGER NOT NULL CHECK(subtotal_cents >= 0),
+                size_oz INTEGER CHECK(size_oz IN (8,12,16) OR size_oz IS NULL),
+                customizations TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS inventory_movements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL REFERENCES products(id),
+                quantity_change INTEGER NOT NULL,
+                reason TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS activity_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor_mode TEXT NOT NULL CHECK(actor_mode IN ('Admin','Cashier','Kitchen','System')),
+                action TEXT NOT NULL,
+                details TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS pending_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_name TEXT NOT NULL,
+                details TEXT NOT NULL,
+                order_type TEXT NOT NULL DEFAULT 'Food' CHECK(order_type IN ('Food','Drink','Pickup')),
+                priority INTEGER NOT NULL CHECK(priority BETWEEN 1 AND 5),
+                sequence_no INTEGER NOT NULL UNIQUE,
+                status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN ('Pending','Completed','Cancelled')),
+                created_at TEXT NOT NULL,
+                completed_at TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_recipes_product ON recipes(product_id);
+            CREATE INDEX IF NOT EXISTS idx_products_active_name ON products(active, name);
+            CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at);
+            CREATE INDEX IF NOT EXISTS idx_items_transaction ON transaction_items(transaction_id);
+            CREATE INDEX IF NOT EXISTS idx_movements_product_date ON inventory_movements(product_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_orders_status_priority ON pending_orders(status, priority, sequence_no);
+            CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_history(created_at);
         ''')
-        
-        
+
+        # Handle migrations for existing tables
         order_columns = {r['name'] for r in c.execute('PRAGMA table_info(pending_orders)').fetchall()}
         if 'order_type' not in order_columns:
             c.execute("ALTER TABLE pending_orders ADD COLUMN order_type TEXT NOT NULL DEFAULT 'Food'")
+
         columns = {r['name'] for r in c.execute('PRAGMA table_info(transaction_items)').fetchall()}
         if 'size_oz' not in columns:
             c.execute('ALTER TABLE transaction_items ADD COLUMN size_oz INTEGER')
