@@ -181,26 +181,35 @@ def set_product_sizes(product_id, size_prices, db_path=DB_PATH):
                   (standard_price,datetime.now().isoformat(timespec='seconds'),product_id))
 
 
-def update_product(product_id, code, name, category, price_cents, threshold, db_path=DB_PATH):
+def update_product(product_id, code, name, category, price_cents, stock, threshold, db_path=DB_PATH):
     code, name, category = code.strip().upper(), name.strip(), category.strip()
-    if not code or len(code)>30 or not name or len(name)>100 or not category or len(category)>50: raise ValueError('Code, name, and category are required and must fit the field limits.')
-    if isinstance(price_cents,bool) or not isinstance(price_cents,int) or price_cents<0: raise ValueError('Price must be non-negative.')
-    if isinstance(threshold,bool) or not isinstance(threshold,int) or threshold<0: raise ValueError('Threshold must be a non-negative whole number.')
+    if not code or len(code) > 30 or not name or len(name) > 100 or not category or len(category) > 50:
+        raise ValueError('Code, name, and category are required and must fit the field limits.')
+    if isinstance(price_cents, bool) or not isinstance(price_cents, int) or price_cents < 0:
+        raise ValueError('Price must be non-negative.')
+    if isinstance(stock, bool) or not isinstance(stock, int) or stock < 0:
+        raise ValueError('Stock must be a non-negative whole number.')
+    if isinstance(threshold, bool) or not isinstance(threshold, int) or threshold < 0:
+        raise ValueError('Threshold must be a non-negative whole number.')
+
     now = datetime.now().isoformat(timespec='seconds')
     try:
         with connection(db_path) as c:
-            cur=c.execute('UPDATE products SET code=?,name=?,category=?,price_cents=?,low_stock_threshold=?,updated_at=? WHERE id=? AND active=1', (code,name,category,price_cents,threshold,now,product_id))
-            if cur.rowcount != 1: raise ValueError('Product not found or already inactive.')
+            cur = c.execute(
+                'UPDATE products SET code=?, name=?, category=?, price_cents=?, stock=?, low_stock_threshold=?, updated_at=? WHERE id=? AND active=1',
+                (code, name, category, price_cents, stock, threshold, now, product_id)
+            )
+            if cur.rowcount != 1:
+                raise ValueError('Product not found or already inactive.')
     except sqlite3.IntegrityError as e:
-        if 'products.code' in str(e).lower(): raise ValueError('That product code already exists.') from e
+        if 'products.code' in str(e).lower():
+            raise ValueError('That product code already exists.')
         raise
 
-def delete_product(product_id):
+def delete_product(product_id, db_path=DB_PATH):
     """Permanently delete a product from the database."""
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
-        conn.commit()
+    with connection(db_path) as c:
+        c.execute("DELETE FROM products WHERE id = ?", (product_id,))
 
 def restock_product(product_id, quantity, db_path=DB_PATH):
     if isinstance(quantity,bool) or not isinstance(quantity,int) or quantity<1: raise ValueError('Restock quantity must be a positive whole number.')
