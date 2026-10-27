@@ -375,33 +375,33 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
             else:
                 category = 'Other'
 
-        c2, c3, c4 = st.columns(3)
-        price = c2.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=0.00, step=0.5, format='%.2f')
-        stock = c3.number_input('Starting stock', min_value=0, max_value=1000000, value=0, step=1)
-        threshold = c4.number_input('Low-stock alert at', min_value=0, max_value=1000000, value=0, step=1)
-        submitted = st.form_submit_button('Add product', type='primary', use_container_width=True)
+            c2, c3, c4 = st.columns(3)
+            price = c2.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=0.00, step=0.5, format='%.2f')
+            stock = c3.number_input('Starting stock', min_value=0, max_value=1000000, value=0, step=1)
+            threshold = c4.number_input('Low-stock alert at', min_value=0, max_value=1000000, value=0, step=1)
+            submitted = st.form_submit_button('Add product', type='primary', use_container_width=True)
 
-    if submitted:
-        try:
-            if not name:
-                raise ValueError('Please enter a product name.')
+        if submitted:
+            try:
+                if not name:
+                    raise ValueError('Please enter a product name.')
             
             # Append size to product name if selected (e.g. "Brown Sugar Latte (16oz)")
-            full_product_name = f"{name} ({selected_size})" if selected_size else name
-            code = generate_category_product_code(category)
+                full_product_name = f"{name} ({selected_size})" if selected_size else name
+                code = generate_category_product_code(category)
 
-            db.add_product(
-                code,
-                full_product_name,
-                category,
-                cents_from_peso(price),
-                int(stock),
-                int(threshold)
-            )
-            st.success(f"'{full_product_name}' added successfully with code {code}.")
-            st.rerun()
-        except Exception as e:
-            safe_error(e)
+                db.add_product(
+                    code,
+                    full_product_name,
+                    category,
+                    cents_from_peso(price),
+                    int(stock),
+                    int(threshold)
+                )
+                st.success(f"'{full_product_name}' added successfully with code {code}.")
+                st.rerun()
+            except Exception as e:
+                safe_error(e)
 
     products = db.list_products()
     with tab2:
