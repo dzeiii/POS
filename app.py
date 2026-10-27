@@ -260,7 +260,15 @@ if mode == 'Admin' and page == 'Dashboard':
 
 elif mode == 'Admin' and page == 'Product Management':
     st.subheader('Product Catalog Management')
-    products = db.list_products()
+    all_products = db.list_products()
+    
+    inventory_categories = [
+        'powder', 'drinking cups', 'food cups', 'square plates', 
+        'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
+    ]
+
+    # Filter out inventory supplies so only sellable menu products appear
+    menu_products = [p for p in all_products if p['category'] not in inventory_categories]
     
     tab1, tab2 = st.tabs(['Add Product', 'Edit / Delete Product'])
     
@@ -298,17 +306,16 @@ elif mode == 'Admin' and page == 'Product Management':
                 
                 full_product_name = f"{name} ({selected_size})" if selected_size else name
 
-                # Check if a product with the EXACT same name already exists
+                # Check if product name already exists among menu items
                 existing_item = next(
-                    (p for p in products if p['name'].strip().casefold() == full_product_name.strip().casefold()), 
+                    (p for p in menu_products if p['name'].strip().casefold() == full_product_name.strip().casefold()), 
                     None
                 )
 
                 if existing_item:
                     st.error(
-                        f"Cannot add product. A product named '{full_product_name}' already exists in the system "
-                        f"(Code: {existing_item['code']}, Price: {money(existing_item['price_cents'])}). "
-                        f"Please edit the existing product or use a different name."
+                        f"Cannot add product. A product named '{full_product_name}' already exists "
+                        f"(Code: {existing_item['code']}, Price: {money(existing_item['price_cents'])})."
                     )
                 else:
                     code = generate_category_product_code(category)
@@ -327,10 +334,10 @@ elif mode == 'Admin' and page == 'Product Management':
                 safe_error(e)
 
     with tab2:
-        if not products: 
-            st.info('Add your first product to begin.')
+        if not menu_products: 
+            st.info('No menu products available to edit.')
         else:
-            labels = {f"{p['code']} — {p['name']} {'(inactive)' if not p['active'] else ''}": p for p in products}
+            labels = {f"{p['code']} — {p['name']} {'(inactive)' if not p['active'] else ''}": p for p in menu_products}
             selected_label = st.selectbox('Select product', list(labels), key='edit_select')
             p = labels[selected_label]
             
@@ -398,7 +405,7 @@ elif mode == 'Admin' and page == 'Product Management':
                         safe_error(e)
             else:
                 st.info('This product is inactive and cannot be sold.')
-
+                
 elif mode == 'Admin' and page == 'Sales History':
     st.subheader('Sales History')
     c1, c2 = st.columns(2)
