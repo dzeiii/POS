@@ -592,9 +592,6 @@ elif mode == 'Cashier' and page == 'Last Transaction':
 # ==========================================
 # MODE 3: INVENTORY MANAGER (Supplies & Raw Materials)
 # ==========================================
-# ==========================================
-# MODE 3: INVENTORY MANAGER
-# ==========================================
 elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
     st.subheader('Inventory Stock Overview')
     all_products = db.list_products(active_only=True)
