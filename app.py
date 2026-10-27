@@ -296,7 +296,13 @@ elif mode=='Admin' and page=='Products & Inventory':
             c1,c2=st.columns(2)
             code=c1.text_input('Product code *',placeholder='e.g. DRK-004').strip().upper()
             name=c2.text_input('Product name *',placeholder='e.g. Brown Sugar Latte').strip()
-            category=st.selectbox('Category',['Gulps', 'Grubs', 'Others'])
+            category=st.selectbox('Category',['Gulps','Grubs','Other'],index=0)
+            if category=='Gulps':
+                category=st.selectbox('Category',['Milkshake', 'Milktea','Lemonades','Lemonade Slushie','Floats','Coffee'],index=0)
+                if category=='Milkshake' or category=='Lemonades' or category=='Lemonade Slushie' or category=='Coffee':
+                    size=st.selectbox('Size',['12oz','16oz'],index=1)
+                elif category=='Floats':
+                    size=st.selectbox('Size',['8oz','12oz','16oz'],index=1)
             c3,c4,c5=st.columns(3)
             price=c3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=50.0,step=0.5,format='%.2f')
             stock=c4.number_input('Starting stock',min_value=0,max_value=1000000,value=0,step=1)
@@ -319,7 +325,7 @@ elif mode=='Admin' and page=='Products & Inventory':
                     ec1,ec2=st.columns(2)
                     new_code=ec1.text_input('Product code',value=p['code']).strip().upper()
                     new_name=ec2.text_input('Product name',value=p['name']).strip()
-                    new_cat=st.selectbox('Category',['Beverage','Food','Snack','Dessert','Other'],index=['Beverage','Food','Snack','Dessert','Other'].index(p['category']) if p['category'] in ['Beverage','Food','Snack','Dessert','Other'] else 4)
+                    new_cat=st.selectbox('Category',['Gulps','Grubs','Other'],index=['Gulps','Grubs','Other'].index(p['category']) if p['category'] in ['Gulps','Grubs','Other'] else 2)
                     ec3,ec4=st.columns(2)
                     new_price=ec3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=p['price_cents']/100,step=0.5,format='%.2f')
                     new_threshold=ec4.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=p['low_stock_threshold'],step=1)
