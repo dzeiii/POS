@@ -296,7 +296,7 @@ elif mode=='Admin' and page=='Products & Inventory':
             c1,c2=st.columns(2)
             code=c1.text_input('Product code *',placeholder='e.g. DRK-004').strip().upper()
             name=c2.text_input('Product name *',placeholder='e.g. Brown Sugar Latte').strip()
-            category=st.selectbox('Category',['Beverage','Food','Snack','Dessert','Other'])
+            category=st.selectbox('Category',['Gulps', 'Grubs', 'Others'])
             c3,c4,c5=st.columns(3)
             price=c3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=50.0,step=0.5,format='%.2f')
             stock=c4.number_input('Starting stock',min_value=0,max_value=1000000,value=0,step=1)
