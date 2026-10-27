@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 import logging
+import re
 import sqlite3
 import streamlit as st
 import pandas as pd
@@ -19,6 +20,48 @@ def safe_error(exc):
     if isinstance(exc,(ValueError,sqlite3.IntegrityError)): st.error(str(exc))
     else: st.error('Something went wrong while saving your changes. No incomplete transaction was committed. Check pos.log for technical details.')
 def cents_from_peso(value): return int(round(float(value)*100))
+
+def generate_category_product_code(category):
+    """Generate the next unused product code for the selected category."""
+    category_prefixes = {
+        'Milkshake': 'GUL-MS',
+        'Milktea': 'GUL-MT',
+        'Lemonades': 'GUL-LEM',
+        'Lemonade Slushie': 'GUL-LS',
+        'Floats': 'GUL-FL',
+        'Coffee': 'GUL-COF',
+        'Streetfoods': 'GRB-STF',
+        'Donut and Waffles': 'GRB-WAF',
+        'Dim Sum': 'GRB-DSM',
+        'Others': 'GRB-OTH',
+        'Gulps': 'GUL',
+        'Grubs': 'GRB',
+        'Other': 'OTH',
+    }
+    prefix = category_prefixes.get(category, 'OTH')
+
+    # Include inactive products too, so old codes are never reused.
+    existing_products = db.list_products()
+    existing_codes = {
+        str(product.get('code', '')).strip().upper()
+        for product in existing_products
+    }
+
+    pattern = re.compile(rf"^{re.escape(prefix)}-(\\d+)$", re.IGNORECASE)
+    used_numbers = []
+    for existing_code in existing_codes:
+        match = pattern.fullmatch(existing_code)
+        if match:
+            used_numbers.append(int(match.group(1)))
+
+    next_number = max(used_numbers, default=0) + 1
+    candidate = f"{prefix}-{next_number:03d}"
+    while candidate.upper() in existing_codes:
+        next_number += 1
+        candidate = f"{prefix}-{next_number:03d}"
+
+    return candidate
+
 
 def rebuild_tree():
     tree=AVLTree()
@@ -293,26 +336,56 @@ elif mode=='Admin' and page=='Products & Inventory':
     tab1,tab2,tab3=st.tabs(['Add product','Edit / deactivate','Restock'])
     with tab1:
         with st.form('add_product_form',clear_on_submit=True):
-            c1,c2=st.columns(2)
-            #automatic product code generation
-            code=c1.text_input('Product code *',placeholder='e.g. DRK-004').strip().upper()
-            name=c2.text_input('Product name *',placeholder='e.g. Brown Sugar Latte').strip()
-            category=st.selectbox('Category',['Gulps','Grubs','Other'],index=0)
-            if category=='Gulps':
-                category=st.selectbox('Category',['Milkshake', 'Milktea','Lemonades','Lemonade Slushie','Floats','Coffee'],index=0)
-                if category=='Milkshake' or category=='Lemonades' or category=='Lemonade Slushie' or category=='Coffee':
-                    size=st.selectbox('Size',['12oz','16oz'],index=1)
+            name=st.text_input('Product name *',placeholder='e.g. Brown Sugar Latte').strip()
+
+            product_group=st.selectbox('Product group',['Gulps','Grubs','Other'],index=0)
+
+            if product_group=='Gulps':
+                category=st.selectbox(
+                    'Gulps category',
+                    ['Milkshake','Milktea','Lemonades','Lemonade Slushie','Floats','Coffee'],
+                    index=0
+                )
+                if category in ['Milkshake','Lemonades','Lemonade Slushie','Coffee']:
+                    st.selectbox('Size',['12oz','16oz'],index=1)
                 elif category=='Floats':
-                    size=st.selectbox('Size',['8oz','12oz','16oz'],index=1)
-            c3,c4,c5=st.columns(3)
-            price=c3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=50.0,step=0.5,format='%.2f')
-            stock=c4.number_input('Starting stock',min_value=0,max_value=1000000,value=0,step=1)
-            threshold=c5.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=5,step=1)
+                    st.selectbox('Size',['8oz','12oz','16oz'],index=1)
+            elif product_group=='Grubs':
+                category=st.selectbox(
+                    'Grubs category',
+                    ['Streetfoods','Donut and Waffles','Dim Sum','Others'],
+                    index=0
+                )
+            else:
+                category='Other'
+                st.caption('This product will use the Other category code prefix.')
+
+            c2,c3,c4=st.columns(3)
+            price=c2.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=50.0,step=0.5,format='%.2f')
+            stock=c3.number_input('Starting stock',min_value=0,max_value=1000000,value=0,step=1)
+            threshold=c4.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=5,step=1)
             submitted=st.form_submit_button('Add product',type='primary',use_container_width=True)
+
         if submitted:
             try:
-                db.add_product(code,name,category,cents_from_peso(price),int(stock),int(threshold)); st.success(f'{name} added successfully.'); st.rerun()
-            except Exception as e: safe_error(e)
+                if not name:
+                    raise ValueError('Please enter a product name.')
+
+                # Generate a category-specific code only when the form is submitted.
+                code=generate_category_product_code(category)
+
+                db.add_product(
+                    code,
+                    name,
+                    category,
+                    cents_from_peso(price),
+                    int(stock),
+                    int(threshold)
+                )
+                st.success(f'{name} added successfully with product code {code}.')
+                st.rerun()
+            except Exception as e:
+                safe_error(e)
     products=db.list_products()
     active=[p for p in products if p['active']]
     with tab2:
@@ -326,7 +399,8 @@ elif mode=='Admin' and page=='Products & Inventory':
                     ec1,ec2=st.columns(2)
                     new_code=ec1.text_input('Product code',value=p['code']).strip().upper()
                     new_name=ec2.text_input('Product name',value=p['name']).strip()
-                    new_cat=st.selectbox('Category',['Gulps','Grubs','Other'],index=['Gulps','Grubs','Other'].index(p['category']) if p['category'] in ['Gulps','Grubs','Other'] else 2)
+                    edit_categories=['Milkshake','Milktea','Lemonades','Lemonade Slushie','Floats','Coffee','Streetfoods','Donut and Waffles','Dim Sum','Others','Gulps','Grubs','Other']
+                    new_cat=st.selectbox('Category',edit_categories,index=edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other'))
                     ec3,ec4=st.columns(2)
                     new_price=ec3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=p['price_cents']/100,step=0.5,format='%.2f')
                     new_threshold=ec4.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=p['low_stock_threshold'],step=1)
