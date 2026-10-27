@@ -361,7 +361,7 @@ elif mode=='Admin' and page=='Products & Inventory':
                 st.caption('This product will use the Other category code prefix.')
 
             c2,c3,c4=st.columns(3)
-            price=c2.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=00.0,step=0.5,format='%.2f')
+            price=c2.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=0.00,step=0.5,format='%.2f')
             stock=c3.number_input('Starting stock',min_value=0,max_value=1000000,value=0,step=1)
             threshold=c4.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=0,step=1)
             submitted=st.form_submit_button('Add product',type='primary',use_container_width=True)
@@ -401,9 +401,11 @@ elif mode=='Admin' and page=='Products & Inventory':
                     new_name=ec2.text_input('Product name',value=p['name']).strip()
                     edit_categories=['Milkshake','Milktea','Lemonades','Lemonade Slushie','Floats','Coffee','Streetfoods','Donut and Waffles','Dim Sum','Others','Gulps','Grubs','Other']
                     new_cat=st.selectbox('Category',edit_categories,index=edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other'))
-                    ec3,ec4=st.columns(2)
+                    ec3,ec4,ec5=st.columns(2)
                     new_price=ec3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=p['price_cents']/100,step=0.5,format='%.2f')
-                    new_threshold=ec4.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=p['low_stock_threshold'],step=1)
+                     new_stock=ec4.number_input('Stock',min_value=0,max_value=1000000,value=p['stock']/,step=1
+                    new_threshold=ec5.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=p['low_stock_threshold'],step=1)
+                   
                     save=st.form_submit_button('Save changes',type='primary')
                 if save:
                     try: db.update_product(p['id'],new_code,new_name,new_cat,cents_from_peso(new_price),int(new_threshold)); st.success('Product updated.'); st.rerun()
