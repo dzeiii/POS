@@ -67,7 +67,28 @@ def generate_category_product_code(category):
         candidate = f"{prefix}-{next_number:03d}"
 
     return candidate
-
+# Function to calculate how many drinks can be prepared from remaining raw materials
+def calculate_available_servings(product_id):
+    conn = db.get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT p.stock, r.amount_needed 
+        FROM recipes r
+        JOIN products p ON r.ingredient_id = p.id
+        WHERE r.product_id = ?
+    ''', (product_id,))
+    
+    ingredients = cursor.fetchall()
+    conn.close()
+    
+    if not ingredients:
+        return "N/A (No recipe set)"
+    
+    # Maximum drinks possible is limited by whichever ingredient runs out first
+    possible_servings = [int(stock // amount) for stock, amount in ingredients if amount > 0]
+    return min(possible_servings) if possible_servings else 0
+    
 def rebuild_tree():
     tree = AVLTree()
     for p in db.list_products(active_only=True): tree.insert(p['code'], p)
@@ -553,7 +574,7 @@ elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
             st.info('No active supply items found in the inventory.')
 
     with tab_finished:
-        st.markdown('#### Finished Menu Product Stocks')
+        st.markdown('#### Menu Product Availability (Based on Raw Ingredients)')
         if finished_products:
             st.dataframe(
                 pd.DataFrame([
@@ -562,8 +583,8 @@ elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
                         'Product Name': p['name'], 
                         'Category': p['category'], 
                         'Price': money(p['price_cents']), 
-                        'Current Stock': p['stock'], 
-                        'Alert Threshold': p['low_stock_threshold']
+                        'Possible Servings Left': calculate_available_servings(p['id']),
+                        'Direct Stock': p['stock']
                     } for p in finished_products
                 ]), 
                 use_container_width=True, 
