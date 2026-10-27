@@ -361,12 +361,34 @@ elif mode == 'Cashier' and page == 'Last Transaction':
 # ==========================================
 # MODE 3: INVENTORY MANAGER
 # ==========================================
+# ==========================================
+# MODE 3: INVENTORY MANAGER
+# ==========================================
+elif mode == 'Inventory Manager' and page == 'Stock Overview':
+    st.subheader('Stock Overview')
+    products = db.list_products(active_only=True)
+    if products:
+        st.dataframe(
+            pd.DataFrame([
+                {
+                    'Code': p['code'], 
+                    'Product Name': p['name'], 
+                    'Category': p['category'], 
+                    'Price': money(p['price_cents']), 
+                    'Current Stock': p['stock'], 
+                    'Alert Threshold': p['low_stock_threshold']
+                } for p in products
+            ]), 
+            use_container_width=True, 
+            hide_index=True
+        )
+    else:
+        st.info('No active products available in the database.')
+
 elif mode == 'Inventory Manager' and page == 'Products Management':
     st.subheader('Add, Edit, & Delete Products')
     
-    # Always fetch all products at the top level of this page so 'products' is defined for both tabs
     products = db.list_products()
-    
     tab1, tab2 = st.tabs(['Add Product', 'Edit / Delete Product'])
     
     with tab1:
@@ -374,12 +396,11 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
             name = st.text_input('Product name *', placeholder='e.g. Brown Sugar Latte').strip()
             product_group = st.selectbox('Product group', ['Gulps', 'Grubs', 'Other'], index=0)
 
-            selected_size = None  # Default size if not applicable
+            selected_size = None
 
             if product_group == 'Gulps':
                 category = st.selectbox('Gulps category', ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee'])
                 
-                # Drink Size Selection Logic
                 if category in ['Milkshake', 'Lemonades', 'Lemonade Slushie', 'Coffee', 'Milktea']:
                     selected_size = st.selectbox('Drink Size', ['12oz', '16oz'], index=1)
                 elif category == 'Floats':
@@ -404,13 +425,11 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
                 
                 full_product_name = f"{name} ({selected_size})" if selected_size else name
 
-                # Check if a product with the EXACT same name already exists
                 existing_item = next(
                     (p for p in products if p['name'].strip().casefold() == full_product_name.strip().casefold()), 
                     None
                 )
 
-                # Block adding if duplicate name exists
                 if existing_item:
                     st.error(
                         f"Cannot add product. A product named '{full_product_name}' already exists in the system "
@@ -446,7 +465,6 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
                     ec1, ec2 = st.columns(2)
                     new_code = ec1.text_input('Product code', value=p['code'], key=f"edit_code_{p['id']}").strip().upper()
                     
-                    # 1. Parse existing size out of product name if present
                     raw_name = p['name']
                     size_match = re.search(r'\s*\((8oz|12oz|16oz)\)$', raw_name, re.IGNORECASE)
                     
@@ -459,12 +477,10 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
                     
                     new_name = ec2.text_input('Product name', value=base_name, key=f"edit_name_{p['id']}").strip()
                     
-                    # 2. Category selection
                     edit_categories = ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee', 'Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others', 'Gulps', 'Grubs', 'Other']
                     cat_index = edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other')
                     new_cat = st.selectbox('Category', edit_categories, index=cat_index, key=f"edit_cat_{p['id']}")
                     
-                    # 3. Drink Size selection editor
                     new_size = None
                     if new_cat in ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Coffee']:
                         size_options = ['12oz', '16oz']
@@ -507,7 +523,24 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
                     except Exception as e:
                         safe_error(e)
             else:
-                st.info('This product is inactive and cannot be sold. Its historic transaction details are preserved.')
+                st.info('This product is inactive and cannot be sold.')
 
-st.divider()
+elif mode == 'Inventory Manager' and page == 'Restock':
+    st.subheader('Restock Inventory')
+    active_products = db.list_products(active_only=True)
+    if active_products:
+        options = {f"{p['code']} — {p['name']} (Current Stock: {p['stock']})": p for p in active_products}
+        with st.form('restock_form'):
+            chosen = st.selectbox('Product to restock', list(options))
+            qty = st.number_input('Quantity to add', min_value=1, max_value=1000000, value=10, step=1)
+            restock = st.form_submit_button('Record Restock', type='primary')
+        if restock:
+            try:
+                db.restock_product(options[chosen]['id'], int(qty))
+                st.success('Stock updated successfully.')
+                st.rerun()
+            except Exception as e:
+                safe_error(e)
+    else:
+        st.info('Add an active product before restocking.')
 st.caption('Gulps & Grubs POS · SQLite persistent database · 3 Workspace Modes')
