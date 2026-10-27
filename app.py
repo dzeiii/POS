@@ -403,7 +403,7 @@ elif mode=='Admin' and page=='Products & Inventory':
                     new_cat=st.selectbox('Category',edit_categories,index=edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other'))
                     ec3,ec4,ec5=st.columns(2)
                     new_price=ec3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=p['price_cents']/100,step=0.5,format='%.2f')
-                     new_stock=ec4.number_input('Stock',min_value=0,max_value=1000000,value=p['stock']/,step=1
+                    new_stock=ec4.number_input('Stock',min_value=0,max_value=1000000,value=p['stock']/,step=1
                     new_threshold=ec5.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=p['low_stock_threshold'],step=1)
                    
                     save=st.form_submit_button('Save changes',type='primary')
