@@ -424,20 +424,46 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
 
     products = db.list_products()
     with tab2:
-        if not products: st.info('Add your first product to begin.')
+        if not products: 
+            st.info('Add your first product to begin.')
         else:
             labels = {f"{p['code']} — {p['name']} {'(inactive)' if not p['active'] else ''}": p for p in products}
             selected_label = st.selectbox('Select product', list(labels), key='edit_select')
             p = labels[selected_label]
+            
             if p['active']:
                 with st.form(f"edit_product_form_{p['id']}"):
                     ec1, ec2 = st.columns(2)
                     new_code = ec1.text_input('Product code', value=p['code'], key=f"edit_code_{p['id']}").strip().upper()
-                    new_name = ec2.text_input('Product name', value=p['name'], key=f"edit_name_{p['id']}").strip()
                     
+                    # 1. Parse existing size out of product name if present (e.g. "Brown Sugar Latte (16oz)" -> name: "Brown Sugar Latte", size: "16oz")
+                    raw_name = p['name']
+                    size_match = re.search(r'\s*\((8oz|12oz|16oz)\)$', raw_name, re.IGNORECASE)
+                    
+                    if size_match:
+                        current_size = size_match.group(1).lower()
+                        base_name = raw_name[:size_match.start()].strip()
+                    else:
+                        current_size = None
+                        base_name = raw_name
+                    
+                    new_name = ec2.text_input('Product name', value=base_name, key=f"edit_name_{p['id']}").strip()
+                    
+                    # 2. Category selection
                     edit_categories = ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee', 'Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others', 'Gulps', 'Grubs', 'Other']
                     cat_index = edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other')
                     new_cat = st.selectbox('Category', edit_categories, index=cat_index, key=f"edit_cat_{p['id']}")
+                    
+                    # 3. Drink Size selection editor (for applicable categories)
+                    new_size = None
+                    if new_cat in ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Coffee']:
+                        size_options = ['12oz', '16oz']
+                        default_idx = size_options.index(current_size) if current_size in size_options else 1
+                        new_size = st.selectbox('Drink Size', size_options, index=default_idx, key=f"edit_size_{p['id']}")
+                    elif new_cat == 'Floats':
+                        size_options = ['8oz', '12oz', '16oz']
+                        default_idx = size_options.index(current_size) if current_size in size_options else 1
+                        new_size = st.selectbox('Drink Size', size_options, index=default_idx, key=f"edit_size_{p['id']}")
                     
                     ec3, ec4, ec5 = st.columns(3)
                     new_price = ec3.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=float(p['price_cents'] / 100), step=0.5, format='%.2f', key=f"edit_price_{p['id']}")
@@ -447,17 +473,32 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
                     save = st.form_submit_button('Save changes', type='primary')
                     if save:
                         try:
-                            db.update_product(p['id'], new_code, new_name, new_cat, cents_from_peso(new_price), int(new_stock), int(new_threshold))
-                            st.success(f"Product '{new_name}' updated successfully.")
+                            # Recombine base name with selected drink size
+                            full_name = f"{new_name} ({new_size})" if new_size else new_name
+                            
+                            db.update_product(
+                                p['id'], 
+                                new_code, 
+                                full_name, 
+                                new_cat, 
+                                cents_from_peso(new_price), 
+                                int(new_stock), 
+                                int(new_threshold)
+                            )
+                            st.success(f"Product '{full_name}' updated successfully.")
                             st.rerun()
-                        except Exception as e: safe_error(e)
+                        except Exception as e:
+                            safe_error(e)
 
                 if st.button('Delete selected product', key=f"delete_btn_{p['id']}", type='secondary'):
                     try:
                         db.delete_product(p['id'])
                         st.success('Product permanently deleted.')
                         st.rerun()
-                    except Exception as e: safe_error(e)
+                    except Exception as e:
+                        safe_error(e)
+            else:
+                st.info('This product is inactive and cannot be sold. Its historic transaction details are preserved.')
 
 elif mode == 'Inventory Manager' and page == 'Restock':
     st.subheader('Restock Inventory')
