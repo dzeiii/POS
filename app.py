@@ -403,14 +403,12 @@ elif mode=='Admin' and page=='Products & Inventory':
                     new_cat=st.selectbox('Category',edit_categories,index=edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other'))
                     ec3,ec4,ec5=st.columns(3)
                     new_price=ec3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=p['price_cents']/100,step=0.5,format='%.2f')
-                    new_stock = ec4.number_input('Stock', min_value=0, max_value=1000000, value=p['stock'], step=1)
+                    new_stock = ec4.number_input('Stock', min_value=0, max_value=1000000, value=p['new_added_stock'], step=1)
                     new_threshold=ec5.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=p['low_stock_threshold'],step=1)
                    
                     save=st.form_submit_button('Save changes',type='primary')
                 if save:
-                    try: db.update_product(p['id'],new_code,new_name,new_cat,cents_from_peso(new_price),int(new_threshold)); st.success('Product updated.'); st.rerun()
-                    except Exception as e: safe_error(e)
-                st.warning('Products are deactivated instead of deleted so historical sales remain intact.')
+                    try db.update_product(p['id'], new_code, new_name, new_cat, cents_from_peso(new_price), int(new_stock), int(new_threshold))
                 if st.button('Deactivate selected product',key='deactivate_btn'):
                     try: db.deactivate_product(p['id']); st.success('Product deactivated.'); st.rerun()
                     except Exception as e: safe_error(e)
