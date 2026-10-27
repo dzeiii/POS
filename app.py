@@ -67,25 +67,36 @@ def generate_category_product_code(category):
         candidate = f"{prefix}-{next_number:03d}"
 
     return candidate
+    
 # Function to calculate how many drinks can be prepared from remaining raw materials
 def calculate_available_servings(product_id):
-    conn = db.get_db()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        SELECT p.stock, r.amount_needed 
-        FROM recipes r
-        JOIN products p ON r.ingredient_id = p.id
-        WHERE r.product_id = ?
-    ''', (product_id,))
-    
-    ingredients = cursor.fetchall()
-    conn.close()
-    
-    if not ingredients:
-        return "N/A (No recipe set)"
-    
-    # Maximum drinks possible is limited by whichever ingredient runs out first
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Check if recipes table exists and fetch raw ingredients
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='recipes'")
+        if not cursor.fetchone():
+            conn.close()
+            return "N/A (No recipe set)"
+
+        cursor.execute('''
+            SELECT p.stock, r.amount_needed 
+            FROM recipes r
+            JOIN products p ON r.ingredient_id = p.id
+            WHERE r.product_id = ?
+        ''', (product_id,))
+        
+        ingredients = cursor.fetchall()
+        conn.close()
+        
+        if not ingredients:
+            return "N/A (No recipe set)"
+        
+        possible_servings = [int(stock // amount) for stock, amount in ingredients if amount > 0]
+        return min(possible_servings) if possible_servings else 0
+    except Exception:
+        return "N/A"
     possible_servings = [int(stock // amount) for stock, amount in ingredients if amount > 0]
     return min(possible_servings) if possible_servings else 0
     
