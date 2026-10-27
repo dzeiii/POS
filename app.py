@@ -377,7 +377,7 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
         with st.form('add_product_form', clear_on_submit=True):
             name = st.text_input('Product name *', placeholder='e.g. Brown Sugar Latte').strip()
             product_group = st.selectbox('Product group', ['Gulps', 'Grubs', 'Other'], index=0)
-    
+
             selected_size = None  # Default size if not applicable
 
             if product_group == 'Gulps':
@@ -388,7 +388,7 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
                     selected_size = st.selectbox('Drink Size', ['12oz', '16oz'], index=1)
                 elif category == 'Floats':
                     selected_size = st.selectbox('Drink Size', ['8oz', '12oz', '16oz'], index=1)
-            
+
             elif product_group == 'Grubs':
                 category = st.selectbox('Grubs category', ['Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others'])
             else:
@@ -398,47 +398,46 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
             price = c2.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=0.00, step=0.5, format='%.2f')
             stock = c3.number_input('Starting stock', min_value=0, max_value=1000000, value=0, step=1)
             threshold = c4.number_input('Low-stock alert at', min_value=0, max_value=1000000, value=0, step=1)
+            
             submitted = st.form_submit_button('Add product', type='primary', use_container_width=True)
 
-          if submitted:
-                try:
-                    if not name:
-                        raise ValueError('Please enter a product name.')
-                    
-                    # Format full product name (e.g. "Brown Sugar Latte (16oz)")
-                    full_product_name = f"{name} ({selected_size})" if selected_size else name
-    
-                    # 1. Check if a product with the EXACT same name already exists
-                    existing_products = db.list_products()
-                    existing_item = next(
-                        (p for p in existing_products if p['name'].strip().casefold() == full_product_name.strip().casefold()), 
-                        None
+        # 'if submitted:' is aligned directly under 'with st.form(...)' at 8 spaces (2 indent levels)
+        if submitted:
+            try:
+                if not name:
+                    raise ValueError('Please enter a product name.')
+                
+                full_product_name = f"{name} ({selected_size})" if selected_size else name
+
+                # Check if a product with the EXACT same name already exists
+                existing_products = db.list_products()
+                existing_item = next(
+                    (p for p in existing_products if p['name'].strip().casefold() == full_product_name.strip().casefold()), 
+                    None
+                )
+
+                # Block adding if duplicate name exists
+                if existing_item:
+                    st.error(
+                        f"Cannot add product. A product named '{full_product_name}' already exists in the system "
+                        f"(Code: {existing_item['code']}, Price: {money(existing_item['price_cents'])}). "
+                        f"Please edit the existing product or use a different name."
                     )
-    
-                    # 2. Block insertion if duplicate name found
-                    if existing_item:
-                        st.error(
-                            f"Cannot add product. A product named '{full_product_name}' already exists in the system "
-                            f"(Code: {existing_item['code']}, Price: {money(existing_item['price_cents'])}). "
-                            f"Please edit the existing product or use a different name."
-                        )
-                    else:
-                        # 3. Add new product only if name is unique
-                        code = generate_category_product_code(category)
-                        db.add_product(
-                            code,
-                            full_product_name,
-                            category,
-                            cents_from_peso(price),
-                            int(stock),
-                            int(threshold)
-                        )
-                        st.success(f"'{full_product_name}' added successfully with code {code}.")
-                        st.rerun()
-    
+                else:
+                    code = generate_category_product_code(category)
+                    db.add_product(
+                        code,
+                        full_product_name,
+                        category,
+                        cents_from_peso(price),
+                        int(stock),
+                        int(threshold)
+                    )
+                    st.success(f"'{full_product_name}' added successfully with code {code}.")
+                    st.rerun()
+
             except Exception as e:
                 safe_error(e)
-                
     with tab2:
         if not products: 
             st.info('Add your first product to begin.')
