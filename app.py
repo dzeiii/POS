@@ -358,28 +358,50 @@ elif mode == 'Inventory Manager' and page == 'Products Management':
         with st.form('add_product_form', clear_on_submit=True):
             name = st.text_input('Product name *', placeholder='e.g. Brown Sugar Latte').strip()
             product_group = st.selectbox('Product group', ['Gulps', 'Grubs', 'Other'], index=0)
+    
+            selected_size = None  # Default size if not applicable
 
-            if product_group == 'Gulps':
-                category = st.selectbox('Gulps category', ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee'])
-            elif product_group == 'Grubs':
-                category = st.selectbox('Grubs category', ['Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others'])
-            else:
-                category = 'Other'
+                if product_group == 'Gulps':
+                    category = st.selectbox('Gulps category', ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee'])
+                
+                # Drink Size Selection Logic
+                    if category in ['Milkshake', 'Lemonades', 'Lemonade Slushie', 'Coffee', 'Milktea']:
+                        selected_size = st.selectbox('Drink Size', ['12oz', '16oz'], index=1)
+                    elif category == 'Floats':
+                        selected_size = st.selectbox('Drink Size', ['8oz', '12oz', '16oz'], index=1)
+        
+                elif product_group == 'Grubs':
+                    category = st.selectbox('Grubs category', ['Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others'])
+                else:
+                    category = 'Other'
 
-            c2, c3, c4 = st.columns(3)
-            price = c2.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=0.00, step=0.5, format='%.2f')
-            stock = c3.number_input('Starting stock', min_value=0, max_value=1000000, value=0, step=1)
-            threshold = c4.number_input('Low-stock alert at', min_value=0, max_value=1000000, value=0, step=1)
-            submitted = st.form_submit_button('Add product', type='primary', use_container_width=True)
+        c2, c3, c4 = st.columns(3)
+        price = c2.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=0.00, step=0.5, format='%.2f')
+        stock = c3.number_input('Starting stock', min_value=0, max_value=1000000, value=0, step=1)
+        threshold = c4.number_input('Low-stock alert at', min_value=0, max_value=1000000, value=0, step=1)
+        submitted = st.form_submit_button('Add product', type='primary', use_container_width=True)
 
-        if submitted:
-            try:
-                if not name: raise ValueError('Please enter a product name.')
-                code = generate_category_product_code(category)
-                db.add_product(code, name, category, cents_from_peso(price), int(stock), int(threshold))
-                st.success(f"{name} added successfully with code {code}.")
-                st.rerun()
-            except Exception as e: safe_error(e)
+    if submitted:
+        try:
+            if not name:
+                raise ValueError('Please enter a product name.')
+            
+            # Append size to product name if selected (e.g. "Brown Sugar Latte (16oz)")
+            full_product_name = f"{name} ({selected_size})" if selected_size else name
+            code = generate_category_product_code(category)
+
+            db.add_product(
+                code,
+                full_product_name,
+                category,
+                cents_from_peso(price),
+                int(stock),
+                int(threshold)
+            )
+            st.success(f"'{full_product_name}' added successfully with code {code}.")
+            st.rerun()
+        except Exception as e:
+            safe_error(e)
 
     products = db.list_products()
     with tab2:
