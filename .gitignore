@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+pos.db
+pos.db-shm
+pos.db-wal
+pos.log
+.streamlit/secrets.toml

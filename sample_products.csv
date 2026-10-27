@@ -1,0 +1,6 @@
+code,name,category,price_php,starting_stock,low_stock_threshold
+DRK-001,Iced Coffee,Beverage,75.00,12,4
+DRK-002,Classic Milk Tea,Beverage,85.00,8,3
+SNK-001,Chocolate Chip Cookie,Snack,35.00,20,5
+SNK-002,Cheese Sandwich,Food,65.00,6,3
+DRK-003,Bottled Water,Beverage,20.00,18,5
