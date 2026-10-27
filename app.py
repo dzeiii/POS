@@ -395,28 +395,38 @@ elif mode=='Admin' and page=='Products & Inventory':
             selected_label=st.selectbox('Select product',list(labels),key='edit_select')
             p=labels[selected_label]
             if p['active']:
-                with st.form('edit_product_form'):
+                with st.form(f"edit_product_form_{p['id']}"):
                     ec1, ec2 = st.columns(2)
-                    new_code = ec1.text_input('Product code', value=p['code']).strip().upper()
-                    new_name = ec2.text_input('Product name', value=p['name']).strip()
+                    new_code = ec1.text_input('Product code', value=p['code'], key=f"edit_code_{p['id']}").strip().upper()
+                    new_name = ec2.text_input('Product name', value=p['name'], key=f"edit_name_{p['id']}").strip()
+                    
                     edit_categories = ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee', 'Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others', 'Gulps', 'Grubs', 'Other']
-                    new_cat = st.selectbox('Category', edit_categories, index=edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other'))
+                    cat_index = edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other')
+                    new_cat = st.selectbox('Category', edit_categories, index=cat_index, key=f"edit_cat_{p['id']}")
                     
                     ec3, ec4, ec5 = st.columns(3)
-                    new_price = ec3.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=p['price_cents']/100, step=0.5, format='%.2f')
-                    new_stock = ec4.number_input('Stock', min_value=0, max_value=1000000, value=p['stock'], step=1)
-                    new_threshold = ec5.number_input('Low-stock alert at', min_value=0, max_value=1000000, value=p['low_stock_threshold'], step=1)
+                    new_price = ec3.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=float(p['price_cents'] / 100), step=0.5, format='%.2f', key=f"edit_price_{p['id']}")
+                    new_stock = ec4.number_input('Stock', min_value=0, max_value=1000000, value=int(p['stock']), step=1, key=f"edit_stock_{p['id']}")
+                    new_threshold = ec5.number_input('Low-stock alert at', min_value=0, max_value=1000000, value=int(p['low_stock_threshold']), step=1, key=f"edit_threshold_{p['id']}")
 
                     save = st.form_submit_button('Save changes', type='primary')
                     if save:
                         try:
-                            db.update_product(p['id'], new_code, new_name, new_cat, cents_from_peso(new_price), int(new_stock), int(new_threshold))
-                            st.success('Product updated successfully.')
+                            db.update_product(
+                                p['id'],
+                                new_code,
+                                new_name,
+                                new_cat,
+                                cents_from_peso(new_price),
+                                int(new_stock),
+                                int(new_threshold)
+                            )
+                            st.success(f"Product '{new_name}' updated successfully.")
                             st.rerun()
                         except Exception as e:
                             safe_error(e)
 
-                if st.button('Delete selected product', key='delete_btn', type='secondary'):
+                if st.button('Delete selected product', key=f"delete_btn_{p['id']}", type='secondary'):
                     try:
                         db.delete_product(p['id'])
                         st.success('Product permanently deleted.')
