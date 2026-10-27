@@ -221,8 +221,7 @@ with st.container(key='site_header'):
         elif mode == 'Cashier':
             page = st.radio('Cashier navigation', ['New Sale', 'Pickup Queue Priority', 'Last Transaction'], horizontal=True, key='cashier_page', label_visibility='collapsed')
         elif mode == 'Inventory Manager':
-            page = st.radio('Inventory navigation', ['Raw Stock Overview', 'Restock Supplies', 'Supply Catalog'], horizontal=True, key='inventory_page', label_visibility='collapsed')
-
+            page = st.radio('Inventory navigation', ['Raw Stock Overview', 'Restock Supplies', 'Recipe Manager', 'Supply Catalog'], horizontal=True, key='inventory_page', label_visibility='collapsed')
 # Rebuild AVL tree on each run
 try: product_tree = rebuild_tree()
 except Exception as e:
@@ -596,13 +595,14 @@ elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
     st.subheader('Inventory Stock Overview')
     all_products = db.list_products(active_only=True)
 
-    inventory_categories = [
+    inventory_categories = {
         'powder', 'drinking cups', 'food cups', 'square plates', 
         'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
-    ]
+    }
 
-    raw_supplies = [p for p in all_products if p['category'] in inventory_categories]
-    finished_products = [p for p in all_products if p['category'] not in inventory_categories]
+    # Normalize category comparison to prevent missing menu products
+    raw_supplies = [p for p in all_products if p.get('category', '').strip().lower() in inventory_categories]
+    finished_products = [p for p in all_products if p.get('category', '').strip().lower() not in inventory_categories]
 
     tab_raw, tab_finished = st.tabs(['📦 Raw Materials & Packaging', '🥤 Menu Products'])
 
@@ -642,7 +642,7 @@ elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
                 hide_index=True
             )
         else:
-            st.info('No active menu products found.')
+            st.info('No active menu products found. Add menu items in Admin > Product Management.')
 
 elif mode == 'Inventory Manager' and page == 'Restock Supplies':
     st.subheader('Restock Inventory & Supplies')
@@ -669,13 +669,13 @@ elif mode == 'Inventory Manager' and page == 'Recipe Manager':
 
     all_products = db.list_products(active_only=True)
     
-    inventory_categories = [
+    inventory_categories = {
         'powder', 'drinking cups', 'food cups', 'square plates', 
         'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
-    ]
+    }
 
-    menu_products = {f"{p['code']} — {p['name']}": p for p in all_products if p['category'] not in inventory_categories}
-    raw_ingredients = {f"{p['code']} — {p['name']} ({p['category']})": p for p in all_products if p['category'] in inventory_categories}
+    menu_products = {f"{p['code']} — {p['name']}": p for p in all_products if p.get('category', '').strip().lower() not in inventory_categories}
+    raw_ingredients = {f"{p['code']} — {p['name']} ({p['category']})": p for p in all_products if p.get('category', '').strip().lower() in inventory_categories}
 
     if not menu_products:
         st.info("No menu products found. Add menu products in Admin > Product Management first.")
