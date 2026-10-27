@@ -702,6 +702,73 @@ elif mode == 'Inventory Manager' and page == 'Supply Catalog':
 
         except Exception as e:
             safe_error(e)
+elif mode == 'Inventory Manager' and page == 'Recipe Manager':
+    st.subheader('📖 Drink & Food Recipe Manager (BOM)')
+    st.caption('Link finished menu products to their raw supply ingredients (powders, cups, lids, packaging).')
+
+    all_products = db.list_products(active_only=True)
+    
+    inventory_categories = [
+        'powder', 'drinking cups', 'food cups', 'square plates', 
+        'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
+    ]
+
+    # Filter into Menu Products and Raw Ingredients
+    menu_products = {f"{p['code']} — {p['name']}": p for p in all_products if p['category'] not in inventory_categories}
+    raw_ingredients = {f"{p['code']} — {p['name']} ({p['category']})": p for p in all_products if p['category'] in inventory_categories}
+
+    if not menu_products:
+        st.info("No menu products found. Add menu products in Admin > Product Management first.")
+    elif not raw_ingredients:
+        st.info("No raw supply items found. Add powders, cups, or lids in Supply Catalog first.")
+    else:
+        selected_menu_label = st.selectbox("Select Menu Item to Configure Recipe", list(menu_products.keys()))
+        selected_product = menu_products[selected_menu_label]
+
+        st.divider()
+        st.markdown(f"#### Recipe for **{selected_product['name']}**")
+
+        # Display current recipe components
+        current_recipe = db.get_product_recipe(selected_product['id'])
+        if current_recipe:
+            st.dataframe(
+                pd.DataFrame([
+                    {
+                        'Ingredient / Supply Item': r['ingredient_name'],
+                        'Category': r['category'],
+                        'Amount Needed per Serving': f"{r['amount_needed']} unit/g"
+                    } for r in current_recipe
+                ]),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # Option to remove an ingredient link
+            del_options = {f"{r['ingredient_name']} ({r['amount_needed']})": r['id'] for r in current_recipe}
+            to_del = st.selectbox("Remove ingredient from recipe", list(del_options.keys()), key="del_ing_select")
+            if st.button("Delete Selected Ingredient", key="del_ing_btn"):
+                db.delete_recipe_ingredient(del_options[to_del])
+                st.success("Ingredient removed from recipe.")
+                st.rerun()
+        else:
+            st.warning("No recipe ingredients linked yet for this menu item.")
+
+        st.divider()
+        st.markdown("##### Add / Update Ingredient Link")
+        with st.form("add_recipe_ingredient_form"):
+            selected_raw_label = st.selectbox("Select Raw Supply Item", list(raw_ingredients.keys()))
+            amount = st.number_input("Amount needed per serving (e.g., 1 for cups/lids, 35 for grams of powder)", min_value=0.1, max_value=10000.0, value=1.0, step=0.5)
             
+            submit_recipe = st.form_submit_button("Link Ingredient to Drink", type="primary")
+
+        if submit_recipe:
+            try:
+                raw_item = raw_ingredients[selected_raw_label]
+                db.add_recipe_ingredient(selected_product['id'], raw_item['id'], amount)
+                st.success(f"Linked {amount} of '{raw_item['name']}' to '{selected_product['name']}'.")
+                st.rerun()
+            except Exception as e:
+                safe_error(e)
+                
 st.divider()
 st.caption('Gulps & Grubs POS · SQLite persistent database · 3 Workspace Modes')
