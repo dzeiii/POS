@@ -66,19 +66,17 @@ def generate_category_product_code(category):
         next_number += 1
         candidate = f"{prefix}-{next_number:03d}"
 
-    return candidate
-    
+    return candidate    
 # Function to calculate how many drinks can be prepared from remaining raw materials
 def calculate_available_servings(product_id):
     try:
         conn = db.get_connection()
         cursor = conn.cursor()
-        
-        # Verify recipes table exists
+
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='recipes'")
         if not cursor.fetchone():
             conn.close()
-            return None  # Fallback to direct product stock
+            return None
 
         cursor.execute('''
             SELECT p.stock, r.amount_needed 
@@ -86,6 +84,17 @@ def calculate_available_servings(product_id):
             JOIN products p ON r.ingredient_id = p.id
             WHERE r.product_id = ?
         ''', (product_id,))
+        
+        ingredients = cursor.fetchall()
+        conn.close()
+        
+        if not ingredients:
+            return None
+            
+        possible_servings = [int(stock // amount) for stock, amount in ingredients if amount > 0]
+        return min(possible_servings) if possible_servings else 0
+    except Exception:
+        return None
         
         ingredients = cursor.fetchall()
         conn.close()
@@ -583,6 +592,9 @@ elif mode == 'Cashier' and page == 'Last Transaction':
 # ==========================================
 # MODE 3: INVENTORY MANAGER (Supplies & Raw Materials)
 # ==========================================
+# ==========================================
+# MODE 3: INVENTORY MANAGER
+# ==========================================
 elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
     st.subheader('Inventory Stock Overview')
     all_products = db.list_products(active_only=True)
@@ -592,7 +604,6 @@ elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
         'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
     ]
 
-    # Separate raw materials/supplies from menu products
     raw_supplies = [p for p in all_products if p['category'] in inventory_categories]
     finished_products = [p for p in all_products if p['category'] not in inventory_categories]
 
@@ -618,7 +629,7 @@ elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
             st.info('No active supply items found in the inventory.')
 
     with tab_finished:
-        st.markdown('#### Menu Product Availability (Based on Raw Ingredients)')
+        st.markdown('#### Menu Product Servings (Calculated from Recipes)')
         if finished_products:
             st.dataframe(
                 pd.DataFrame([
@@ -627,34 +638,97 @@ elif mode == 'Inventory Manager' and page == 'Raw Stock Overview':
                         'Product Name': p['name'], 
                         'Category': p['category'], 
                         'Price': money(p['price_cents']), 
-                        'Possible Servings Left': calculate_available_servings(p['id']),
-                        'Direct Stock': p['stock']
+                        'Available Servings': calculate_available_servings(p['id']) if calculate_available_servings(p['id']) is not None else 'No Recipe Mapped'
                     } for p in finished_products
                 ]), 
                 use_container_width=True, 
                 hide_index=True
             )
         else:
-            st.info('No active menu products found in the inventory.')
+            st.info('No active menu products found.')
 
 elif mode == 'Inventory Manager' and page == 'Restock Supplies':
     st.subheader('Restock Inventory & Supplies')
     active_products = db.list_products(active_only=True)
     if active_products:
-        options = {f"{p['code']} — {p['name']} (Category: {p['category']} | Current Stock: {p['stock']})": p for p in active_products}
+        options = {f"{p['code']} — {p['name']} (Category: {p['category']} | Stock: {p['stock']})": p for p in active_products}
         with st.form('restock_form'):
-            chosen = st.selectbox('Select supply item to restock', list(options))
+            chosen = st.selectbox('Select item to restock', list(options))
             qty = st.number_input('Quantity to add', min_value=1, max_value=1000000, value=10, step=1)
             restock = st.form_submit_button('Record Restock', type='primary')
         if restock:
             try:
                 db.restock_product(options[chosen]['id'], int(qty))
-                st.success(f"Successfully added {qty} unit(s) to '{options[chosen]['name']}'.")
+                st.success(f"Added {qty} unit(s) to '{options[chosen]['name']}'.")
                 st.rerun()
             except Exception as e:
                 safe_error(e)
     else:
         st.info('No active supply items available to restock.')
+
+elif mode == 'Inventory Manager' and page == 'Recipe Manager':
+    st.subheader('📖 Drink & Food Recipe Manager (BOM)')
+    st.caption('Link finished menu products to their raw supply ingredients (powders, cups, lids, packaging).')
+
+    all_products = db.list_products(active_only=True)
+    
+    inventory_categories = [
+        'powder', 'drinking cups', 'food cups', 'square plates', 
+        'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
+    ]
+
+    menu_products = {f"{p['code']} — {p['name']}": p for p in all_products if p['category'] not in inventory_categories}
+    raw_ingredients = {f"{p['code']} — {p['name']} ({p['category']})": p for p in all_products if p['category'] in inventory_categories}
+
+    if not menu_products:
+        st.info("No menu products found. Add menu products in Admin > Product Management first.")
+    elif not raw_ingredients:
+        st.info("No raw supply items found. Add powders, cups, or lids in Supply Catalog first.")
+    else:
+        selected_menu_label = st.selectbox("Select Menu Item to Configure Recipe", list(menu_products.keys()))
+        selected_product = menu_products[selected_menu_label]
+
+        st.divider()
+        st.markdown(f"#### Recipe for **{selected_product['name']}**")
+
+        current_recipe = db.get_product_recipe(selected_product['id'])
+        if current_recipe:
+            st.dataframe(
+                pd.DataFrame([
+                    {
+                        'Ingredient / Supply Item': r['ingredient_name'],
+                        'Category': r['category'],
+                        'Amount Needed per Serving': f"{r['amount_needed']} unit/g"
+                    } for r in current_recipe
+                ]),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            del_options = {f"{r['ingredient_name']} ({r['amount_needed']})": r['id'] for r in current_recipe}
+            to_del = st.selectbox("Remove ingredient from recipe", list(del_options.keys()), key="del_ing_select")
+            if st.button("Delete Selected Ingredient", key="del_ing_btn"):
+                db.delete_recipe_ingredient(del_options[to_del])
+                st.success("Ingredient removed from recipe.")
+                st.rerun()
+        else:
+            st.warning("No recipe ingredients linked yet for this menu item.")
+
+        st.divider()
+        st.markdown("##### Add / Update Ingredient Link")
+        with st.form("add_recipe_ingredient_form"):
+            selected_raw_label = st.selectbox("Select Raw Supply Item", list(raw_ingredients.keys()))
+            amount = st.number_input("Amount needed per serving (e.g. 1 for cup/lid, 35 for grams of powder)", min_value=0.1, max_value=10000.0, value=1.0, step=0.5)
+            submit_recipe = st.form_submit_button("Link Ingredient to Drink", type="primary")
+
+        if submit_recipe:
+            try:
+                raw_item = raw_ingredients[selected_raw_label]
+                db.add_recipe_ingredient(selected_product['id'], raw_item['id'], amount)
+                st.success(f"Linked {amount} of '{raw_item['name']}' to '{selected_product['name']}'.")
+                st.rerun()
+            except Exception as e:
+                safe_error(e)
 
 elif mode == 'Inventory Manager' and page == 'Supply Catalog':
     st.subheader('Supply & Ingredient Catalog')
@@ -693,7 +767,7 @@ elif mode == 'Inventory Manager' and page == 'Supply Catalog':
                     code,
                     raw_name,
                     raw_cat,
-                    0,  # ₱0.00 price for raw materials
+                    0,
                     int(raw_stock),
                     int(raw_threshold)
                 )
@@ -702,73 +776,6 @@ elif mode == 'Inventory Manager' and page == 'Supply Catalog':
 
         except Exception as e:
             safe_error(e)
-elif mode == 'Inventory Manager' and page == 'Recipe Manager':
-    st.subheader('📖 Drink & Food Recipe Manager (BOM)')
-    st.caption('Link finished menu products to their raw supply ingredients (powders, cups, lids, packaging).')
-
-    all_products = db.list_products(active_only=True)
-    
-    inventory_categories = [
-        'powder', 'drinking cups', 'food cups', 'square plates', 
-        'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
-    ]
-
-    # Filter into Menu Products and Raw Ingredients
-    menu_products = {f"{p['code']} — {p['name']}": p for p in all_products if p['category'] not in inventory_categories}
-    raw_ingredients = {f"{p['code']} — {p['name']} ({p['category']})": p for p in all_products if p['category'] in inventory_categories}
-
-    if not menu_products:
-        st.info("No menu products found. Add menu products in Admin > Product Management first.")
-    elif not raw_ingredients:
-        st.info("No raw supply items found. Add powders, cups, or lids in Supply Catalog first.")
-    else:
-        selected_menu_label = st.selectbox("Select Menu Item to Configure Recipe", list(menu_products.keys()))
-        selected_product = menu_products[selected_menu_label]
-
-        st.divider()
-        st.markdown(f"#### Recipe for **{selected_product['name']}**")
-
-        # Display current recipe components
-        current_recipe = db.get_product_recipe(selected_product['id'])
-        if current_recipe:
-            st.dataframe(
-                pd.DataFrame([
-                    {
-                        'Ingredient / Supply Item': r['ingredient_name'],
-                        'Category': r['category'],
-                        'Amount Needed per Serving': f"{r['amount_needed']} unit/g"
-                    } for r in current_recipe
-                ]),
-                use_container_width=True,
-                hide_index=True
-            )
-
-            # Option to remove an ingredient link
-            del_options = {f"{r['ingredient_name']} ({r['amount_needed']})": r['id'] for r in current_recipe}
-            to_del = st.selectbox("Remove ingredient from recipe", list(del_options.keys()), key="del_ing_select")
-            if st.button("Delete Selected Ingredient", key="del_ing_btn"):
-                db.delete_recipe_ingredient(del_options[to_del])
-                st.success("Ingredient removed from recipe.")
-                st.rerun()
-        else:
-            st.warning("No recipe ingredients linked yet for this menu item.")
-
-        st.divider()
-        st.markdown("##### Add / Update Ingredient Link")
-        with st.form("add_recipe_ingredient_form"):
-            selected_raw_label = st.selectbox("Select Raw Supply Item", list(raw_ingredients.keys()))
-            amount = st.number_input("Amount needed per serving (e.g., 1 for cups/lids, 35 for grams of powder)", min_value=0.1, max_value=10000.0, value=1.0, step=0.5)
-            
-            submit_recipe = st.form_submit_button("Link Ingredient to Drink", type="primary")
-
-        if submit_recipe:
-            try:
-                raw_item = raw_ingredients[selected_raw_label]
-                db.add_recipe_ingredient(selected_product['id'], raw_item['id'], amount)
-                st.success(f"Linked {amount} of '{raw_item['name']}' to '{selected_product['name']}'.")
-                st.rerun()
-            except Exception as e:
-                safe_error(e)
                 
 st.divider()
 st.caption('Gulps & Grubs POS · SQLite persistent database · 3 Workspace Modes')
