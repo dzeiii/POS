@@ -267,7 +267,6 @@ elif mode == 'Admin' and page == 'Product Management':
         'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
     ]
 
-    # Filter out inventory supplies so only sellable menu products appear
     menu_products = [p for p in all_products if p['category'] not in inventory_categories]
     
     tab1, tab2 = st.tabs(['Add Product', 'Edit / Delete Product'])
@@ -292,11 +291,7 @@ elif mode == 'Admin' and page == 'Product Management':
             else:
                 category = 'Other'
 
-            c2, c3, c4 = st.columns(3)
-            price = c2.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=0.00, step=0.5, format='%.2f')
-            stock = c3.number_input('Starting stock', min_value=0, max_value=1000000, value=0, step=1)
-            threshold = c4.number_input('Low-stock alert at', min_value=0, max_value=1000000, value=0, step=1)
-            
+            price = st.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=0.00, step=0.5, format='%.2f')
             submitted = st.form_submit_button('Add product', type='primary', use_container_width=True)
 
         if submitted:
@@ -306,7 +301,6 @@ elif mode == 'Admin' and page == 'Product Management':
                 
                 full_product_name = f"{name} ({selected_size})" if selected_size else name
 
-                # Check if product name already exists among menu items
                 existing_item = next(
                     (p for p in menu_products if p['name'].strip().casefold() == full_product_name.strip().casefold()), 
                     None
@@ -324,8 +318,8 @@ elif mode == 'Admin' and page == 'Product Management':
                         full_product_name,
                         category,
                         cents_from_peso(price),
-                        int(stock),
-                        int(threshold)
+                        0,  # Default stock initialized at 0 (managed in Inventory Manager)
+                        5   # Default low-stock threshold
                     )
                     st.success(f"'{full_product_name}' added successfully with code {code}.")
                     st.rerun()
@@ -372,10 +366,7 @@ elif mode == 'Admin' and page == 'Product Management':
                         default_idx = size_options.index(current_size) if current_size in size_options else 1
                         new_size = st.selectbox('Drink Size', size_options, index=default_idx, key=f"edit_size_{p['id']}")
                     
-                    ec3, ec4, ec5 = st.columns(3)
-                    new_price = ec3.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=float(p['price_cents'] / 100), step=0.5, format='%.2f', key=f"edit_price_{p['id']}")
-                    new_stock = ec4.number_input('Stock', min_value=0, max_value=1000000, value=int(p['stock']), step=1, key=f"edit_stock_{p['id']}")
-                    new_threshold = ec5.number_input('Low-stock alert at', min_value=0, max_value=1000000, value=int(p['low_stock_threshold']), step=1, key=f"edit_threshold_{p['id']}")
+                    new_price = st.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=float(p['price_cents'] / 100), step=0.5, format='%.2f', key=f"edit_price_{p['id']}")
 
                     save = st.form_submit_button('Save changes', type='primary')
                     if save:
@@ -388,8 +379,8 @@ elif mode == 'Admin' and page == 'Product Management':
                                 full_name, 
                                 new_cat, 
                                 cents_from_peso(new_price), 
-                                int(new_stock), 
-                                int(new_threshold)
+                                int(p['stock']),                # Preserve current stock count
+                                int(p['low_stock_threshold'])    # Preserve current threshold
                             )
                             st.success(f"Product '{full_name}' updated successfully.")
                             st.rerun()
@@ -431,21 +422,43 @@ elif mode == 'Admin' and page == 'Sales History':
 # ==========================================
 elif mode == 'Cashier' and page == 'New Sale':
     st.subheader('New Sale')
-    products = db.list_products(active_only=True)
+    all_products = db.list_products(active_only=True)
+    
+    inventory_categories = [
+        'powder', 'drinking cups', 'food cups', 'square plates', 
+        'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
+    ]
+
+    # Only show finished menu items to cashiers
+    products = [p for p in all_products if p['category'] not in inventory_categories]
+    
     left, right = st.columns([1.35, 1], gap='large')
     with left:
         st.markdown('#### Available products')
         query = st.text_input('Find a product', placeholder='Search product name or code')
         if query.strip():
             match = product_tree.search(query.strip())
-            shown = [match] if match else [p for p in products if query.casefold() in (p['name'] + ' ' + p['code']).casefold()]
-        else: shown = products
-        if not shown: st.info('No matching active products.')
+            if match and match['category'] not in inventory_categories:
+                shown = [match]
+            else:
+                shown = [p for p in products if query.casefold() in (p['name'] + ' ' + p['code']).casefold()]
+        else: 
+            shown = products
+            
+        if not shown: 
+            st.info('No matching active products.')
+            
         for start_idx in range(0, len(shown), 2):
             cols = st.columns(2)
             for col, p in zip(cols, shown[start_idx:start_idx+2]):
                 with col:
-                    st.markdown(f"<div class='product-card'><b>{p['name']}</b><br><span class='small-note'>{p['code']} · {p['category']}</span><h3>{money(p['price_cents'])}</h3><span class='small-note'>In stock: {p['stock']}</span></div>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div class='product-card'><b>{p['name']}</b><br>"
+                        f"<span class='small-note'>{p['code']} · {p['category']}</span>"
+                        f"<h3>{money(p['price_cents'])}</h3>"
+                        f"<span class='small-note'>In stock: {p['stock']}</span></div>", 
+                        unsafe_allow_html=True
+                    )
                     with st.form(f"add_cart_{p['id']}"):
                         qty = st.number_input('Qty', min_value=1, max_value=max(1, int(p['stock'])), value=1, step=1, key=f"qty_{p['id']}", disabled=p['stock'] < 1)
                         add = st.form_submit_button('Add to cart', use_container_width=True, disabled=p['stock'] < 1)
