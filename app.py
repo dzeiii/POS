@@ -408,7 +408,7 @@ elif mode=='Admin' and page=='Products & Inventory':
                    
                     save=st.form_submit_button('Save changes',type='primary')
                 if save:
-                    try db.update_product(p['id'], new_code, new_name, new_cat, cents_from_peso(new_price), int(new_stock), int(new_threshold))
+                    try: db.update_product(p['id'], new_code, new_name, new_cat, cents_from_peso(new_price), int(new_stock), int(new_threshold))
                 if st.button('Deactivate selected product',key='deactivate_btn'):
                     try: db.deactivate_product(p['id']); st.success('Product deactivated.'); st.rerun()
                     except Exception as e: safe_error(e)
