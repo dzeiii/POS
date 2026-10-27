@@ -409,9 +409,13 @@ elif mode=='Admin' and page=='Products & Inventory':
                     save=st.form_submit_button('Save changes',type='primary')
                 if save:
                     try: db.update_product(p['id'], new_code, new_name, new_cat, cents_from_peso(new_price), int(new_stock), int(new_threshold))
-                if st.button('Deactivate selected product',key='deactivate_btn'):
-                    try: db.deactivate_product(p['id']); st.success('Product deactivated.'); st.rerun()
-                    except Exception as e: safe_error(e)
+               if st.button('Delete selected product', key='delete_btn', type='secondary'):
+                    try:
+                        db.delete_product(p['id'])
+                        st.success('Product permanently deleted.')
+                        st.rerun()
+                    except Exception as e:
+                        safe_error(e)
             else: st.info('This product is inactive and cannot be sold. Its historic transaction details are preserved.')
     with tab3:
         if active:
