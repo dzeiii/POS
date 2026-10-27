@@ -294,7 +294,8 @@ elif mode=='Admin' and page=='Products & Inventory':
     with tab1:
         with st.form('add_product_form',clear_on_submit=True):
             c1,c2=st.columns(2)
-            code=c1.text_input('Product code *',placeholder='e.g. DRK-004').strip().upper()
+            #how to implement automatic product code generation
+            code = db.generate_product_code()
             name=c2.text_input('Product name *',placeholder='e.g. Brown Sugar Latte').strip()
             category=st.selectbox('Category',['Gulps','Grubs','Other'],index=0)
             if category=='Gulps':
