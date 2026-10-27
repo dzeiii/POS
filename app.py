@@ -6,7 +6,6 @@ import streamlit as st
 import pandas as pd
 from data_structures import LinkedListCart, AVLTree, MinHeap, HeapEntry
 import database as db
-from menu_catalog import MENU_ITEMS, MENU_CATEGORIES, menu_options_for
 
 APP_DIR=Path(__file__).resolve().parent
 LOG_PATH=APP_DIR/'pos.log'
