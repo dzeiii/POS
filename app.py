@@ -308,6 +308,46 @@ elif mode == 'Cashier' and page == 'New Sale':
                     st.rerun()
                 except Exception as e:
                     safe_error(e)
+elif mode == 'Cashier' and page == 'Pickup Queue Priority':
+    st.subheader('Cashier - Order Priority & Pickup Queue')
+    st.caption('Cashiers can set order priority levels: Priority 1 is most urgent (handles first), Priority 5 is least urgent/flexible.')
+    
+    with st.form('new_order_form', clear_on_submit=True):
+        customer = st.text_input('Customer name *')
+        details = st.text_input('Order details *', placeholder='e.g. 2 Milk Teas, 1 Waffle')
+        priority = st.select_slider('Set Priority Level', options=[1, 2, 3, 4, 5], value=3, 
+                                    format_func=lambda x: {1: '1 · Urgent', 2: '2 · High', 3: '3 · Normal', 4: '4 · Low', 5: '5 · Flexible'}[x])
+        add_order_btn = st.form_submit_button('Add Priority Order to Queue', type='primary')
+    
+    if add_order_btn:
+        try:
+            if not customer or not details:
+                raise ValueError("Customer name and order details are required.")
+            oid = db.add_order(customer, details, int(priority))
+            st.success(f'Order #{oid} added with Priority {priority}.')
+            st.rerun()
+        except Exception as e: safe_error(e)
+
+    st.divider()
+    heap = rebuild_heap()
+    next_order = heap.peek()
+    
+    if next_order:
+        st.markdown("### 🔔 Next Priority Order in Queue")
+        st.info(f"**Order #{next_order.order_id}** — {next_order.payload['customer_name']} | **Priority Level:** {next_order.priority} | **Details:** {next_order.payload['details']}")
+        if st.button('Mark Next Order Completed', type='primary'):
+            try:
+                db.update_order_status(next_order.order_id, 'Completed')
+                st.success(f'Order #{next_order.order_id} marked as completed.')
+                st.rerun()
+            except Exception as e: safe_error(e)
+    else:
+        st.success('No pending pickup orders in queue.')
+
+    st.markdown("#### All Pending Pickup Orders")
+    all_orders = db.list_orders()
+    if all_orders:
+        st.dataframe(pd.DataFrame([{'Order #': o['id'], 'Customer': o['customer_name'], 'Details': o['details'], 'Priority': o['priority'], 'Status': o['status'], 'Created': o['created_at'].replace('T', ' ')} for o in all_orders]), use_container_width=True, hide_index=True)
 
 elif mode == 'Cashier' and page == 'Last Transaction':
     st.subheader('Last Transaction')
