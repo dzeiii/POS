@@ -293,8 +293,10 @@ elif mode=='Admin' and page=='Products & Inventory':
     tab1,tab2,tab3=st.tabs(['Add product','Edit / deactivate','Restock'])
     with tab1:
         with st.form('add_product_form',clear_on_submit=True):
-            c1=st.columns(2)
-            name=c1.text_input('Product name *',placeholder='e.g. Brown Sugar Latte').strip()
+            c1,c2=st.columns(2)
+            #automatic product code generation
+            code=c1.text_input('Product code *',placeholder='e.g. DRK-004').strip().upper()
+            name=c2.text_input('Product name *',placeholder='e.g. Brown Sugar Latte').strip()
             category=st.selectbox('Category',['Gulps','Grubs','Other'],index=0)
             if category=='Gulps':
                 category=st.selectbox('Category',['Milkshake', 'Milktea','Lemonades','Lemonade Slushie','Floats','Coffee'],index=0)
@@ -302,12 +304,10 @@ elif mode=='Admin' and page=='Products & Inventory':
                     size=st.selectbox('Size',['12oz','16oz'],index=1)
                 elif category=='Floats':
                     size=st.selectbox('Size',['8oz','12oz','16oz'],index=1)
-                #how to implement automatic product code generation according to the category
-                code = db.generate_product_code()
-            c2,c3,c4=st.columns(3)
-            price=c2.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=50.0,step=0.5,format='%.2f')
-            stock=c3.number_input('Starting stock',min_value=0,max_value=1000000,value=0,step=1)
-            threshold=c4.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=5,step=1)
+            c3,c4,c5=st.columns(3)
+            price=c3.number_input('Price (₱)',min_value=0.0,max_value=1000000.0,value=50.0,step=0.5,format='%.2f')
+            stock=c4.number_input('Starting stock',min_value=0,max_value=1000000,value=0,step=1)
+            threshold=c5.number_input('Low-stock alert at',min_value=0,max_value=1000000,value=5,step=1)
             submitted=st.form_submit_button('Add product',type='primary',use_container_width=True)
         if submitted:
             try:
