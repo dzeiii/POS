@@ -45,13 +45,13 @@ def generate_category_product_code(category, product_group=None):
         'lids dome': 'LID-DOM',
         'Other': 'OTH',
     }
-   group_prefixes = {
-    'Drinks': 'GUL',
-    'Foods': 'GRB',
-    'Others': 'OTH'
-}
-
-prefix = category_prefixes.get(
+    group_prefixes = {
+        'Drinks': 'GUL',
+        'Foods': 'GRB',
+        'Others': 'OTH'
+    }
+    
+    prefix = category_prefixes.get(
     category.strip(),
     group_prefixes.get(product_group, 'OTH')
 )
