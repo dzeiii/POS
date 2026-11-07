@@ -21,7 +21,9 @@ def safe_error(exc):
     else: st.error('Something went wrong while saving your changes. No incomplete transaction was committed. Check pos.log for technical details.')
 def cents_from_peso(value): return int(round(float(value) * 100))
 
-def generate_category_product_code(category, product_group=None):
+def cents_from_peso(value): return int(round(float(value) * 100))
+
+def generate_category_product_code(category):
     """Generate the next unused product code for the selected category."""
     category_prefixes = {
         'Milkshake': 'GUL-MS',
@@ -45,17 +47,14 @@ def generate_category_product_code(category, product_group=None):
         'lids dome': 'LID-DOM',
         'Other': 'OTH',
     }
-    group_prefixes = {
-        'Drinks': 'GUL',
-        'Foods': 'GRB',
-        'Others': 'OTH'
-    }
-    prefix = category_prefixes.get(category.strip(),group_prefixes.get(product_group, 'OTH'))
+    prefix = category_prefixes.get(category, 'OTH')
+
     existing_products = db.list_products()
     existing_codes = {
         str(product.get('code', '')).strip().upper()
         for product in existing_products
     }
+
     pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$", re.IGNORECASE)
     used_numbers = []
     for existing_code in existing_codes:
@@ -70,6 +69,47 @@ def generate_category_product_code(category, product_group=None):
         candidate = f"{prefix}-{next_number:03d}"
 
     return candidate    
+# Function to calculate how many drinks can be prepared from remaining raw materials
+def calculate_available_servings(product_id):
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='recipes'")
+        if not cursor.fetchone():
+            conn.close()
+            return None
+
+        cursor.execute('''
+            SELECT p.stock, r.amount_needed 
+            FROM recipes r
+            JOIN products p ON r.ingredient_id = p.id
+            WHERE r.product_id = ?
+        ''', (product_id,))
+        
+        ingredients = cursor.fetchall()
+        conn.close()
+        
+        if not ingredients:
+            return None
+            
+        possible_servings = [int(stock // amount) for stock, amount in ingredients if amount > 0]
+        return min(possible_servings) if possible_servings else 0
+    except Exception:
+        return None
+        
+        ingredients = cursor.fetchall()
+        conn.close()
+        
+        if not ingredients:
+            return None  # Fallback to direct product stock
+        
+        possible_servings = [int(stock // amount) for stock, amount in ingredients if amount > 0]
+        return min(possible_servings) if possible_servings else 0
+    except Exception:
+        return None
+    possible_servings = [int(stock // amount) for stock, amount in ingredients if amount > 0]
+    return min(possible_servings) if possible_servings else 0
 # Function to calculate how many drinks can be prepared from remaining raw materials
 def calculate_available_servings(product_id):
     try:
