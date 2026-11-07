@@ -334,7 +334,6 @@ elif mode == 'Admin' and page == 'Product Management':
                         raise ValueError('High-stock threshold must be greater than low-stock threshold.')
                         
                     db.add_product(code, full_product_name, category, cents_from_peso(price),0, int(low_threshold), high_stock_threshold=int(high_threshold))
-                    )
                     st.success(f"'{full_product_name}' added successfully with code {code}.")
                     st.rerun()
 
