@@ -51,11 +51,11 @@ def generate_category_product_code(category, product_group=None):
         'Others': 'OTH'
     }
 prefix = category_prefixes.get(category.strip(),group_prefixes.get(product_group, 'OTH'))
-    existing_products = db.list_products()
-    existing_codes = {
-        str(product.get('code', '')).strip().upper()
-        for product in existing_products
-    }
+existing_products = db.list_products()
+existing_codes = {
+    str(product.get('code', '')).strip().upper()
+    for product in existing_products
+}
 
     pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$", re.IGNORECASE)
     used_numbers = []
