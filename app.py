@@ -21,7 +21,7 @@ def safe_error(exc):
     else: st.error('Something went wrong while saving your changes. No incomplete transaction was committed. Check pos.log for technical details.')
 def cents_from_peso(value): return int(round(float(value) * 100))
 
-def generate_category_product_code(category):
+def generate_category_product_code(category, product_group=None):
     """Generate the next unused product code for the selected category."""
     category_prefixes = {
         'Milkshake': 'GUL-MS',
@@ -45,8 +45,16 @@ def generate_category_product_code(category):
         'lids dome': 'LID-DOM',
         'Other': 'OTH',
     }
-    prefix = category_prefixes.get(category, 'OTH')
+   group_prefixes = {
+    'Drinks': 'GUL',
+    'Foods': 'GRB',
+    'Others': 'OTH'
+}
 
+prefix = category_prefixes.get(
+    category.strip(),
+    group_prefixes.get(product_group, 'OTH')
+)
     existing_products = db.list_products()
     existing_codes = {
         str(product.get('code', '')).strip().upper()
@@ -111,7 +119,7 @@ def calculate_available_servings(product_id):
     
 def rebuild_tree():
     tree = AVLTree()
-    for p in db.list_products(active_only=True): tree.insert(p['code'], p)
+    for p in db.list_s(active_only=True): tree.insert(p['code'], p)
     tree.validate()
     return tree
 
@@ -161,7 +169,7 @@ h2{border-bottom:2px solid rgba(244,123,32,.20);padding-bottom:.35rem}
 input,[data-baseweb="select"]>div,textarea{border-radius:8px!important}
 [data-testid="stDataFrame"], [data-testid="stTable"]{border:1px solid var(--line);border-radius:10px;overflow:hidden}
 hr{border-color:var(--line)!important} footer{visibility:hidden}
-.product-card{background:linear-gradient(145deg,#fffdf6 0%,#fff0d2 100%);border:1px solid #efc36b;border-top:4px solid var(--orange);border-radius:14px;padding:14px;min-height:125px;box-shadow:0 4px 12px rgba(75,17,23,.055)}
+.-card{background:linear-gradient(145deg,#fffdf6 0%,#fff0d2 100%);border:1px solid #efc36b;border-top:4px solid var(--orange);border-radius:14px;padding:14px;min-height:125px;box-shadow:0 4px 12px rgba(75,17,23,.055)}
 .product-card h3{color:var(--orange-deep)!important;margin:.45rem 0}
 .small-note{font-size:.88rem;color:var(--muted)}
 [data-testid="stSidebar"]{display:none!important}
@@ -273,143 +281,173 @@ if mode == 'Admin' and page == 'Dashboard':
     st.bar_chart(pd.DataFrame(daily).set_index('Date'))
 
 elif mode == 'Admin' and page == 'Product Management':
-    st.subheader('Product Catalog Management')
+    st.subheader('Product Management')
+    st.caption('Create and manage your own menu products.')
     all_products = db.list_products()
-    
-    inventory_categories = [
-        'powder', 'drinking cups', 'food cups', 'square plates', 
-        'takeout boxes big', 'takeout boxes small', 'lids flat', 'lids dome'
+    inventory_categories = {
+        'powder', 'drinking cups', 'food cups',
+        'square plates', 'takeout boxes big',
+        'takeout boxes small', 'lids flat', 'lids dome'
+    }
+    menu_products = [
+        p for p in all_products
+        if p['category'].strip().lower() not in inventory_categories
     ]
 
-    menu_products = [p for p in all_products if p['category'] not in inventory_categories]
-    
-    tab1, tab2 = st.tabs(['Add Product', 'Edit / Delete Product'])
-    
+    tab1, tab2 = st.tabs(['Add New Product','Edit / Delete Products'])
+    # =====================================
+    # TAB 1: ADD PRODUCT
+    # =====================================
+
     with tab1:
+        st.markdown('#### Create a Menu Product')
         with st.form('add_product_form', clear_on_submit=True):
-            name = st.text_input('Product name *', placeholder='e.g. Brown Sugar Latte').strip()
-            product_group = st.selectbox('Product group', ['Gulps', 'Grubs', 'Other'], index=0)
-
-            selected_size = None
-
-            if product_group == 'Gulps':
-                category = st.selectbox('Gulps category', ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee'])
-                
-                if category in ['Milkshake', 'Lemonades', 'Lemonade Slushie', 'Coffee', 'Milktea']:
-                    selected_size = st.selectbox('Drink Size', ['12oz', '16oz'], index=1)
-                elif category == 'Floats':
-                    selected_size = st.selectbox('Drink Size', ['8oz', '12oz', '16oz'], index=1)
-
-            elif product_group == 'Grubs':
-                category = st.selectbox('Grubs category', ['Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others'])
+            product_group = st.selectbox(
+                'Product Group',
+                ['Drinks', 'Foods', 'Others']
+            )
+            name = st.text_input(
+                'Product Name *',
+                placeholder='e.g. Chocolate Kisses'
+            ).strip()
+            category = st.text_input(
+                'Product Category *',
+                placeholder='e.g. Milkshake, Pasta, Streetfood'
+            ).strip()
+            size = ''
+            if product_group == 'Drinks':
+                size = st.text_input(
+                    'Drink Size / Variant',
+                    placeholder='e.g. 12oz, 16oz'
+                ).strip()
             else:
-                category = 'Other'
+                size = st.text_input(
+                    'Size / Variant (Optional)',
+                    placeholder='e.g. Solo, Family Size'
+                ).strip()
+            price = st.number_input(
+                'Selling Price (₱)',
+                min_value=0.01,
+                max_value=1000000.00,
+                value=35.00,
+                step=0.50,
+                format='%.2f'
+            )
+            st.markdown('#### Inventory Settings')
+            col1, col2, col3 = st.columns(3)
+            starting_stock = col1.number_input('Starting Stock',min_value=0,max_value=1000000,value=0,step=1)
+            low_threshold = col2.number_input('Low-Stock Alert At',min_value=0,max_value=1000000,value=5,step=1)
 
-            price = st.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=0.00, step=0.5, format='%.2f')
-            submitted = st.form_submit_button('Add product', type='primary', use_container_width=True)
+            high_threshold = col3.number_input('High-Stock Alert At',min_value=1,max_value=1000000,value=100,step=1)
+            submitted = st.form_submit_button('Add Product',type='primary',use_container_width=True)
 
         if submitted:
             try:
                 if not name:
                     raise ValueError('Please enter a product name.')
-                
-                full_product_name = f"{name} ({selected_size})" if selected_size else name
+                if not category:
+                    raise ValueError('Please enter a product category.')
+                if high_threshold <= low_threshold:
+                    raise ValueError('High-stock threshold must be greater than low-stock threshold.')
 
+                # Combine name and size into one product name
+                full_product_name = (f'{name} ({size})' if size else name)
+                # Check for duplicate products
                 existing_item = next(
-                    (p for p in menu_products if p['name'].strip().casefold() == full_product_name.strip().casefold()), 
-                    None
-                )
-
+                    (p for p in menu_products if p['name'].strip().casefold() == full_product_name.strip().casefold()),None)
                 if existing_item:
-                    st.error(
-                        f"Cannot add product. A product named '{full_product_name}' already exists "
-                        f"(Code: {existing_item['code']}, Price: {money(existing_item['price_cents'])})."
-                    )
-                else:
-                    code = generate_category_product_code(category)
-                    low_threshold = st.number_input(
-                        'Low-stock alert at', min_value=0, max_value=1000000, value=5, step=1, key='new_low_threshold')
-                    high_threshold = st.number_input( 'High-stock alert at', min_value=1, max_value=1000000, value=100, step=1, key='new_high_threshold')
-                    if high_threshold <= low_threshold:
-                        raise ValueError('High-stock threshold must be greater than low-stock threshold.')
-                        
-                    db.add_product(code, full_product_name, category, cents_from_peso(price),0, int(low_threshold), high_stock_threshold=int(high_threshold))
-                    st.success(f"'{full_product_name}' added successfully with code {code}.")
-                    st.rerun()
+                    raise ValueError(f"Product '{full_product_name}' already exists.")
+
+                # Automatically generate product code
+                code = generate_category_product_code(category,product_group)
+                # Save product to SQLite
+                db.add_product(code, full_product_name,category,cents_from_peso(price),int(starting_stock),int(low_threshold),high_stock_threshold=int(high_threshold))
+
+                st.success(f"Product '{full_product_name}' added successfully! "f"Product Code: {code}")
+                st.rerun()
 
             except Exception as e:
                 safe_error(e)
 
+    # =====================================
+    # TAB 2: EDIT / DELETE PRODUCT
+    # =====================================
     with tab2:
-        if not menu_products: 
-            st.info('No menu products available to edit.')
+        st.markdown('#### Existing Menu Products')
+        if not menu_products:
+            st.info('No menu products available yet.')
         else:
-            labels = {f"{p['code']} — {p['name']} {'(inactive)' if not p['active'] else ''}": p for p in menu_products}
-            selected_label = st.selectbox('Select product', list(labels), key='edit_select')
+            labels = {
+                f"{p['code']} — {p['name']}": p
+                for p in menu_products}
+
+            selected_label = st.selectbox(
+                'Select a product to manage',
+                list(labels.keys()),
+                key='edit_select')
+
             p = labels[selected_label]
-            
             if p['active']:
                 with st.form(f"edit_product_form_{p['id']}"):
-                    ec1, ec2 = st.columns(2)
-                    new_code = ec1.text_input('Product code', value=p['code'], key=f"edit_code_{p['id']}").strip().upper()
-                    
-                    raw_name = p['name']
-                    size_match = re.search(r'\s*\((8oz|12oz|16oz)\)$', raw_name, re.IGNORECASE)
-                    
-                    if size_match:
-                        current_size = size_match.group(1).lower()
-                        base_name = raw_name[:size_match.start()].strip()
-                    else:
-                        current_size = None
-                        base_name = raw_name
-                    
-                    new_name = ec2.text_input('Product name', value=base_name, key=f"edit_name_{p['id']}").strip()
-                    
-                    edit_categories = ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Floats', 'Coffee', 'Streetfoods', 'Donut and Waffles', 'Dim Sum', 'Others', 'Gulps', 'Grubs', 'Other']
-                    cat_index = edit_categories.index(p['category']) if p['category'] in edit_categories else edit_categories.index('Other')
-                    new_cat = st.selectbox('Category', edit_categories, index=cat_index, key=f"edit_cat_{p['id']}")
-                    
-                    new_size = None
-                    if new_cat in ['Milkshake', 'Milktea', 'Lemonades', 'Lemonade Slushie', 'Coffee']:
-                        size_options = ['12oz', '16oz']
-                        default_idx = size_options.index(current_size) if current_size in size_options else 1
-                        new_size = st.selectbox('Drink Size', size_options, index=default_idx, key=f"edit_size_{p['id']}")
-                    elif new_cat == 'Floats':
-                        size_options = ['8oz', '12oz', '16oz']
-                        default_idx = size_options.index(current_size) if current_size in size_options else 1
-                        new_size = st.selectbox('Drink Size', size_options, index=default_idx, key=f"edit_size_{p['id']}")
-                    
-                    new_price = st.number_input('Price (₱)', min_value=0.0, max_value=1000000.0, value=float(p['price_cents'] / 100), step=0.5, format='%.2f', key=f"edit_price_{p['id']}")
+                    st.text_input(
+                        'Product Code',
+                        value=p['code'],
+                        disabled=True)
+                    new_name = st.text_input(
+                        'Product Name',
+                        value=p['name']).strip()
+                    new_category = st.text_input(
+                        'Product Category',
+                        value=p['category']).strip()
+                    new_price = st.number_input(
+                        'Selling Price (₱)',
+                        min_value=0.01,
+                        max_value=1000000.00,
+                        value=float(p['price_cents']) / 100,
+                        step=0.50,
+                        format='%.2f')
+                    save = st.form_submit_button(
+                        'Save Changes',
+                        type='primary')
+                if save:
+                    try:
+                        if not new_name:
+                            raise ValueError('Product name cannot be empty.')
 
-                    save = st.form_submit_button('Save changes', type='primary')
-                    if save:
-                        try:
-                            full_name = f"{new_name} ({new_size})" if new_size else new_name
-                            
-                            db.update_product(
-                                p['id'], 
-                                new_code, 
-                                full_name, 
-                                new_cat, 
-                                cents_from_peso(new_price), 
-                                int(p['stock']),                # Preserve current stock count
-                                int(p['low_stock_threshold'])    # Preserve current threshold
-                            )
-                            st.success(f"Product '{full_name}' updated successfully.")
-                            st.rerun()
-                        except Exception as e:
-                            safe_error(e)
+                        if not new_category:
+                            raise ValueError('Product category cannot be empty.')
 
-                if st.button('Delete selected product', key=f"delete_btn_{p['id']}", type='secondary'):
+                        db.update_product(
+                            p['id'],
+                            p['code'],
+                            new_name,
+                            new_category,
+                            cents_from_peso(new_price),
+                            int(p['stock']),
+                            int(p['low_stock_threshold'])
+                        )
+
+                        st.success('Product updated successfully.')
+                        st.rerun()
+
+                    except Exception as e:
+                        safe_error(e)
+
+                st.divider()
+                if st.button(
+                    'Delete Selected Product',
+                    key=f"delete_btn_{p['id']}",
+                    type='secondary'
+                ):
                     try:
                         db.delete_product(p['id'])
-                        st.success('Product permanently deleted.')
+                        st.success('Product deleted successfully.')
                         st.rerun()
                     except Exception as e:
                         safe_error(e)
             else:
-                st.info('This product is inactive and cannot be sold.')
-                
+                st.info(
+                    'This product is inactive and cannot be sold.'   )
 elif mode == 'Admin' and page == 'Sales History':
     st.subheader('Sales History')
     c1, c2 = st.columns(2)
